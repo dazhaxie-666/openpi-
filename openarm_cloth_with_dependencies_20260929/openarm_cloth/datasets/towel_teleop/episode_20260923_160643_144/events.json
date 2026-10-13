@@ -1,0 +1,38 @@
+[
+  {
+    "wall_time": 1790150808.32206,
+    "key": "1",
+    "action": "select_left",
+    "active_arm": "left"
+  },
+  {
+    "wall_time": 1790150809.8018043,
+    "key": "1",
+    "action": "select_left",
+    "active_arm": "left"
+  },
+  {
+    "wall_time": 1790150811.139091,
+    "key": "1",
+    "action": "select_left",
+    "active_arm": "left"
+  },
+  {
+    "wall_time": 1790150811.7242634,
+    "key": "1",
+    "action": "select_left",
+    "active_arm": "left"
+  },
+  {
+    "wall_time": 1790150812.8773544,
+    "key": "1",
+    "action": "select_left",
+    "active_arm": "left"
+  },
+  {
+    "wall_time": 1790150813.3591528,
+    "key": "2",
+    "action": "select_right",
+    "active_arm": "right"
+  }
+]

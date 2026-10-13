@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.cpython-*-linux-gnu.so
+build/
+install/
+log/
+logs/
+outputs/
+models/*.task
+videos/*.mp4
+data/*
+out/*
+!data/.gitkeep
+!out/.gitkeep
