@@ -1,9 +1,11 @@
 # OpenArm / Pose2Arm A+B 主项目
 
 更新日期：2026-10-21。日常只使用 `D:\openpi\latest\openpi--main`。
-基于上游 `8df4726` 加本地集成改动；本次整理不包含 GitHub 上传或训练新模型。
+基于上游 `8df4726` 加本地集成改动；代码发布目标为用户仓库，未训练新识别模型。
 
 后续代码发布目标与数据排除范围见 [GitHub 发布说明](docs/github_publish_20261021.md)。
+最新默认实时路径包含躯干参考标定、完整相对掌面手腕、个人捏合标定与独立物理线程。
+操作、验证和未完成的独立验收见 [动作跟随 v2](openarm_cloth/docs/motion_v2_implementation_20261021_CN.md)。
 新克隆不包含本机视频、模型权重和 outputs；示范回放需另行准备对应数据。
 
 ## 快速开始
@@ -22,11 +24,11 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 # 可选的几何抓取图形选择器
 & .\run.ps1 -Mode tabletop-ui
 
-# 真人摄像头双臂跟随
+# A 肩肘腕标定 + 完整相对掌面 → B 动力学双臂跟随
 & .\run.ps1 -Mode live
 
-# 新增：右手意图驱动方块抓取、搬运、放置；空格开始
-& .\run.ps1 -Mode human-task -ScriptArgs '--timeout','60'
+# 同一条 A 映射参与双臂动作/右臂抓取任务，允许重试；空格开始
+& .\run.ps1 -Mode human-task
 
 # 同一个 B 环境中的资源检查、完整回归
 & .\run.ps1 -Mode check
@@ -55,9 +57,16 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 ## 当前范围
 
 人体动作复现与几何视觉抓取已共存，但仍是**独立运行模式**，不是已训练的完整任务策略。
-另新增独立 `human-task` 共享控制任务入口，已验证明确标记的软件手势闭环；
+`live` / `human-task` 默认复用 A 的肩肘腕映射、平滑与臂长标定，并增加躯干参考与 B 完整腕部适配，驱动 B 的左右臂。
+独立 `human-task` 保留桌面/物块约束，右臂抓取评分，捏合闭爪/张手松爪，抓空允许继续调整；
+`--control assisted` 保留原视觉对齐、自动抬升/放置。已验证明确标记的软件输入检查；
 USB 真人操作验收仍待完成，不能把自动检查 PASS 计为真人示范成功。
 用法与数据/回放说明见 [任务控制器](openarm_cloth/docs/human_task_20261021_CN.md)。
+最新接线、标定操作及真实能力边界见 [原始 A 映射接入](openarm_cloth/docs/original_pose2arm_integration_20261021_CN.md)。
+针对抖动新增执行端平滑、加速度限制，默认 A 夹爪改为连续开度；
+实现与验证见 [实时平滑与连续夹爪](openarm_cloth/docs/live_smoothing_continuous_gripper_20261021_CN.md)。
+最新真人失败记录已用于修复 A/B 限位精度导致的退出，并将默认人体模型换为 full，
+新增当前手腕关联和观测一致性检查；见 [真人识别与退出修复](openarm_cloth/docs/live_observation_exit_fix_20261021_CN.md)。
 默认 `fusion` 是纯动作运动学回放；`--execution dynamic` 才测试仿真执行器。
 `tabletop` 使用 RGB-D 几何识别方块/长方体/竖直圆柱，当前每次物理演示一个目标。
 没有承诺任意物体、任意摆位、多人/遮挡精度、全程安全、零抖动或实体硬件效果。

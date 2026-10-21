@@ -22,7 +22,10 @@ def validate(path,check_video=True):
     if np.any(np.diff(allrows['control_frame'])<=0): errors.append('non-increasing control frame')
     if np.any(allrows['physics_end_ns']<allrows['first_physics_step_ns']): errors.append('physics clock order')
     valid_source=allrows['fresh_source']&allrows['pose_valid']&~allrows['startup']&~allrows['paused']
-    if np.any(allrows['first_physics_step_ns'][valid_source]<allrows['inference_done_ns'][valid_source]): errors.append('inference/consumption clock order')
+    if 'physics_reference_done_ns' in allrows:
+        reference=allrows['physics_reference_done_ns']>0
+        if np.any(allrows['first_physics_step_ns'][reference]<allrows['physics_reference_done_ns'][reference]):errors.append('reference/physics clock order')
+    elif np.any(allrows['first_physics_step_ns'][valid_source]<allrows['inference_done_ns'][valid_source]): errors.append('inference/consumption clock order')
     for field in ('robot_qpos','robot_qvel','robot_ctrl','action'):
         if not np.isfinite(allrows[field]).all(): errors.append(f'{field}: nonfinite robot state')
     if allrows['pose_raw'].shape[1:]!=(33,4) or allrows['right_hand_raw'].shape[1:]!=(21,3): errors.append('landmark schema shape')

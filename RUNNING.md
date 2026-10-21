@@ -32,27 +32,55 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 & .\run.ps1 -Mode live
 ```
 
-默认 `split` 运行时、`twist` 转腕、lite 人体模型。使用本地摄像头，按 Q 退出。
-录像、数值记录保存在 `openarm_cloth\outputs`。关闭录像：
+默认复用 **A 的 `OpenArmLiveController`** 处理根/肢体平滑、10 个有效帧臂长标定与肩肘腕 IK，
+增加可靠躯干参考和相对前臂掌面旋转，经 B 三腕关节适配后由 B 原执行器负责动力学。
+人体模型与手腕模式默认 full；auto 躯干在髋部不可见时使用正对相机的标定上身参考。
+身体标定后，G 记录一次合拢、O 记录一次张开，每次保持至少 1.2 秒，交替至少 10 轮完成左右个人捏合标定。
+默认仍是连续夹爪；C 重标定身体/腕部并保持夹爪，空格暂停，M 镜像预览，T 标记 15 秒开发片段，Q 保存退出。
+完整说明与当前验收边界见 [动作跟随 v2](openarm_cloth/docs/motion_v2_implementation_20261021_CN.md)。
+身体/手部位置不一致或手腕画外时会显示原因并保持，手部重新捕获需要两帧确认。
+保留头部、双肩、肘腕在画面内；限位舍入差和误关联的修复见
+[真人识别与退出修复](openarm_cloth/docs/live_observation_exit_fix_20261021_CN.md)。
+默认 responsive 使用来源时间的 A 滤波及 B 加速度限制，去掉重复关节低通；夹爪按掌尺度归一化捏合连续改变开度，
+预览显示左右开度百分比，半开也能保持。细节与录制对比见
+[实时平滑与连续夹爪](openarm_cloth/docs/live_smoothing_continuous_gripper_20261021_CN.md)。
+录像、数值记录保存在 `openarm_cloth\outputs\a_live`。关闭录像：
 
 ```powershell
 & .\run.ps1 -Mode live -ScriptArgs '--no-save-video'
+# 原 B split/legacy 姿态控制留作对照
+& .\run.ps1 -Mode live -ScriptArgs '--mapping','b-legacy'
 ```
 
-## 新增：真人意图驱动单臂抓取与放置
+## A 原始映射参与抓取场景
 
 ```powershell
-# 现场看仿真反馈操作右手；首次可给 60 秒熟悉，默认正式时限 15 秒
-& .\run.ps1 -Mode human-task -ScriptArgs '--camera','0','--timeout','60'
-# 无真人的软件输入闭环检查，报告明确标记 synthetic，不算真人成功
+# 默认 A 原映射驱动双臂；无倒计时，右臂抓取评分，抓空继续调整
+& .\run.ps1 -Mode human-task -ScriptArgs '--camera','0'
+# 直接控制软件检查：20 秒空抓/张手/往返，结果 INCOMPLETE 正常，不冒充抓取成功
 & .\run.ps1 -Mode human-task -ScriptArgs '--check','--scripted-check'
+# 保留旧视觉辅助模式，捏合后自动对齐、抬升，绿色区张手后辅助放置
+& .\run.ps1 -Mode human-task -ScriptArgs '--control','assisted','--timeout','60'
+# 原辅助模式的合成输入完整抓放检查
+& .\run.ps1 -Mode human-task -ScriptArgs '--control','assisted','--check','--scripted-check'
 ```
 
-张开手后空格开始，移动接近 → 捏合并保持 → 抬升后搬运 → 在绿色区张手。
-C 重定位、空格暂停、Q 退出。原始人体视频只在 `--save-human-video` 时本地保存。
+当前默认 `--mapping pose2arm --arms both`。先用 10 个有效观测标定各臂，右手张开后空格开始。
+左手→左臂、右手→右臂，捏合闭爪/张手松爪，下降/抬升/搬运由人操作，不自动接管抓取。
+B 保留桌面/物块接触检查，受阻侧限步或保持，另一侧及夹爪独立处理；评分仍只看右臂任务。
+`--arms right` 仅控制右臂；`--mapping wrist` 保留此前小工作区手腕位置控制。
+要做双臂动作跟随用 `live`，该模式使用独立的无桌面/方块场景，不做抓取任务。
+碰撞/IK 拒绝仅保持和提示，抓空、掉落和识别丢失可调整重试；意外程序错误仍停止并保存。
+C 重新人体标定、空格暂停、M 镜像预览、Q 保存退出；默认无时限，`--timeout` 在直接模式只提醒。
+画面显示 `WRIST_LOW_CONFIDENCE` 时，将右手与躯干错开并保持肩膀/手腕入镜；
+`STALE_CAMERA_FRAME` 表示处理后的图像已过期，IK/碰撞拒绝会单独提示，不统称识别失败。
+若三维查看器把仿真复位（时钟归零），程序停止该条记录并提示重启；
+不要在进行中的任务里使用原生复位快捷键，重新运行命令会建立新的初始工作姿态和记录。
+原始人体视频只在 `--save-human-video` 时本地保存。
 有真实操作视频时可传 `--video <绝对路径>`；自由摆臂视频不能代替抓取示范。
 数据校验、状态/动作回放与能力边界见
 [任务控制器说明](openarm_cloth/docs/human_task_20261021_CN.md)。
+本轮实际接线、数据字段与验证范围见 [A 原始映射接入说明](openarm_cloth/docs/original_pose2arm_integration_20261021_CN.md)。
 
 ## A→B 物理回放
 

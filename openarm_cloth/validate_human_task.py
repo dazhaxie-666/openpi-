@@ -63,11 +63,16 @@ def validate(path):
             errors.append('source/synthetic labels disagree')
         if synthetic and report['human_validation_performed']:
             errors.append('synthetic input incorrectly labelled as human validation')
+        if manifest.get('control_mode', 'assisted') != report.get('control_mode', 'assisted'):
+            errors.append('control mode labels disagree')
         reasons = {event['reason'] for event in events}
         if report['verdict'] == 'PASS':
             if not report['evaluation']['physical_task_success']:
                 errors.append('PASS without independent physics success')
-            for reason in ('human_close_near_camera_target', 'human_open_in_goal_zone: assisted_lower_before_release'):
+            required_intents = (('human_direct_start', 'human_direct_close', 'human_direct_open')
+                                if manifest.get('control_mode') == 'direct' else
+                                ('human_close_near_camera_target', 'human_open_in_goal_zone: assisted_lower_before_release'))
+            for reason in required_intents:
                 if reason not in reasons:
                     errors.append('PASS without required human intent gate: ' + reason)
         if not manifest['finished']:
@@ -78,6 +83,8 @@ def validate(path):
             warnings.append('no robot RGB observations; cannot train a visual policy from this recording')
         if np.any(rows['paused']):
             warnings.append('paused rows must be removed explicitly before training')
+        if manifest.get('control_mode') == 'direct':
+            warnings.append('continuous direct session may include retries; review/segment successful demonstrations before training')
         result.update(recording_valid=not errors, frames=n, image_count=image_count,
                       task_success=report['verdict'] == 'PASS', synthetic_input=synthetic,
                       candidate_for_human_bc_review=bool(not errors and not synthetic and report['verdict'] == 'PASS'

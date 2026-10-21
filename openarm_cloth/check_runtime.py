@@ -34,7 +34,8 @@ def main():
                  'retarget', 'hand_association', 'rrt_connect_planner', 'collision_safety',
                  'tabletop_perception', 'tabletop_fixture', 'generic_object_scene',
                  'generic_grasp_planner', 'demo_tabletop_objects', 'human_grasp_task',
-                 'human_task_robot', 'run_human_task', 'replay_human_task', 'validate_human_task'):
+                 'human_task_robot', 'run_human_task', 'replay_human_task', 'validate_human_task',
+                 'pose2arm_task_mapping','run_pose2arm_live'):
         path = Path(importlib.import_module(name).__file__).resolve()
         if not path.is_relative_to(checkout):
             raise RuntimeError(f'Stale import {name}: {path}')

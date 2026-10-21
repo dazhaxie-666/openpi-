@@ -76,6 +76,7 @@ class FullVideoSource:
                 pose=human_arm_pose(world,filtered,normals[s],side=s)
                 if pose is not None: normals[s]=pose['normal']
                 arms[s]=dict(pose=pose,point=human_wrist(world,s),hand_valid=present,
+                             position_point=human_wrist(world,s,require_elbow=False),
                              fist=features,closure=float(blob['closure'][index,j]),
                              hand_raw=hand,hand_filtered=filtered,hand_norm=norm)
             self.frames.append(dict(seq=index,read_end=self.epoch_ns+int(index/self.fps*1e9),arms=arms))

@@ -24,15 +24,16 @@ def human_right_wrist(world):
     return human_wrist(world,'right')
 
 
-def human_wrist(world,side='right'):
+def human_wrist(world,side='right',require_elbow=True):
     if side not in ('left','right'): raise ValueError('unknown human arm side')
     shoulder,elbow,wrist=(11,13,15) if side=='left' else (12,14,16)
     if world is None: return None
     w=np.asarray(world,dtype=float)
     if w.shape!=(33,4): return None
-    ids=[11,12,23,24,elbow,wrist]
+    ids=[11,12,23,24,wrist]+([elbow] if require_elbow else [])
     if not np.isfinite(w[ids]).all(): return None
-    if np.min(w[[11,12,elbow,wrist],3])<.45: return None
+    observed=[11,12,wrist]+([elbow] if require_elbow else [])
+    if np.min(w[observed,3])<.45: return None
     if np.linalg.norm(w[12,:3]-w[11,:3])<.05: return None
     if np.linalg.norm((w[11,:3]+w[12,:3]-w[23,:3]-w[24,:3])/2)<.05: return None
     try:

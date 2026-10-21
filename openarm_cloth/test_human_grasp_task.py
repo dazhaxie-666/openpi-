@@ -250,7 +250,7 @@ class InputTests(unittest.TestCase):
         self.assertFalse(human_input(obs, .5).valid)
 
     def test_invalid_task_config_is_rejected(self):
-        for changes in (dict(timeout_s=0), dict(gain=float('nan')), dict(close_ratio=.8, open_ratio=.3)):
+        for changes in (dict(timeout_s=-1), dict(gain=float('nan')), dict(close_ratio=.8, open_ratio=.3)):
             with self.assertRaises(ValueError):
                 TaskConfig(**changes)
 

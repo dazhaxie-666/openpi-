@@ -8,6 +8,7 @@ import ctypes
 from datetime import datetime
 import hashlib
 import json
+from pathlib import Path
 import time
 
 import cv2
@@ -162,14 +163,26 @@ def run(args):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--camera',type=int,default=0);p.add_argument('--pose-model',choices=('lite','full'),default='lite')
+    p.add_argument('--camera',type=int,default=0);p.add_argument('--pose-model',choices=('lite','full'),default='full')
     p.add_argument('--width',type=int,default=1280);p.add_argument('--height',type=int,default=720)
-    p.add_argument('--wrist-mode',choices=('twist','full'),default='twist')
+    p.add_argument('--wrist-mode',choices=('twist','full','off'),default='full',help='Full measured palm rotation (default); off keeps the original A arm-only wrist')
+    p.add_argument('--torso-mode',choices=('auto','full_body','upper_body','original'),default='auto')
+    p.add_argument('--gripper-mode',choices=('continuous','binary','hold'),default='continuous')
+    p.add_argument('--calibration',type=Path,default=None)
+    p.add_argument('--execution-profile',choices=('responsive','smooth'),default='responsive')
     p.add_argument('--save-video',action=argparse.BooleanOptionalAction,default=True)
     p.add_argument('--seconds',type=float,default=0)
-    p.add_argument('--runtime',choices=('split','legacy'),default='split')
+    p.add_argument('--runtime',choices=('split','legacy'),default='split',help='Previous B mapping only; original A uses a latest-observation worker')
+    p.add_argument('--mapping',choices=('pose2arm','b-legacy'),default='pose2arm',help='Original A online calibration/mapping (default), or previous B pose IK')
+    p.add_argument('--check',action='store_true');p.add_argument('--scripted-check',action='store_true')
+    p.add_argument('--check-steps',type=int,default=400)
     args=p.parse_args()
-    if args.runtime=='split':
+    if args.mapping=='b-legacy' and args.wrist_mode=='off':
+        p.error('--wrist-mode off requires --mapping pose2arm; b-legacy supports twist/full')
+    if args.mapping=='pose2arm':
+        from run_pose2arm_live import run as run_original_a
+        run_original_a(args)
+    elif args.runtime=='split':
         from live_bimanual_runtime import run_split
         run_split(args)
     else: run(args)

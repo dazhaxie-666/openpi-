@@ -96,6 +96,26 @@ class RecordingTests(unittest.TestCase):
         self.assertTrue(report['physical_actuator_replay'])
         self.assertFalse(report['human_validation_performed'])
 
+    def test_direct_success_requires_direct_intents_and_keeps_synthetic_label(self):
+        self.manifest['control_mode'] = 'direct'
+        self.write_manifest()
+        report = dict(frames=3, verdict='PASS', control_mode='direct', synthetic_input=True,
+                      human_validation_performed=False, evaluation=dict(physical_task_success=True))
+        (self.path / 'result.json').write_text(json.dumps(report))
+        events = [dict(reason=r) for r in ('human_direct_start', 'human_direct_close')]
+        (self.path / 'events.json').write_text(json.dumps(events))
+        self.assertIn('PASS without required human intent gate: human_direct_open', validate(self.path)['errors'])
+        events.append(dict(reason='human_direct_open'))
+        (self.path / 'events.json').write_text(json.dumps(events))
+        quality = validate(self.path)
+        self.assertTrue(quality['recording_valid'], quality)
+        self.assertFalse(quality['candidate_for_human_bc_review'])
+
+    def test_direct_and_assisted_labels_cannot_silently_disagree(self):
+        self.manifest['control_mode'] = 'direct'
+        self.write_manifest()
+        self.assertIn('control mode labels disagree', validate(self.path)['errors'])
+
 
 if __name__ == '__main__':
     unittest.main()

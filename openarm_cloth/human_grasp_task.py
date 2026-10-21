@@ -39,6 +39,9 @@ class TaskCommand:
     target: np.ndarray | None = None
     finger: float = .044
     owner: str = 'hold'
+    joint_targets: dict | None = None
+    finger_targets: dict | None = None
+    reference_capture_s: float | None = None
 
 
 @dataclass
@@ -60,10 +63,12 @@ class TaskConfig:
     upper: np.ndarray = field(default_factory=lambda: np.array([.54, .18, .69]))
 
     def __post_init__(self):
-        for name in ('gain', 'speed', 'timeout_s', 'input_loss_s', 'dwell_s', 'near_m',
+        for name in ('gain', 'speed', 'input_loss_s', 'dwell_s', 'near_m',
                      'lift_m', 'goal_radius_m', 'max_target_lead_m'):
             if not np.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
                 raise ValueError(f'{name} must be positive and finite')
+        if not np.isfinite(self.timeout_s) or self.timeout_s < 0:
+            raise ValueError('timeout_s must be nonnegative and finite (0 disables timeout)')
         if not np.isfinite(self.deadband_m) or self.deadband_m < 0:
             raise ValueError('deadband_m must be finite and nonnegative')
         if not 0 < self.close_ratio < self.open_ratio:
@@ -199,7 +204,7 @@ class HumanGraspTask:
         valid = (human is not None and human.valid and human.point is not None
                  and np.asarray(human.point).shape == (3,) and np.isfinite(human.point).all()
                  and np.isfinite(human.capture_s))
-        if self.started is not None and clock - self.started > self.config.timeout_s:
+        if self.config.timeout_s > 0 and self.started is not None and clock - self.started > self.config.timeout_s:
             self.fail('task_timeout', clock)
             return hold
         if not valid:
@@ -333,3 +338,99 @@ class HumanGraspTask:
                 self.fail('placement_not_confirmed_by_camera', clock)
             return TaskCommand('hold', finger=.044)
         raise RuntimeError('Unknown task stage ' + self.stage)
+
+
+class DirectHumanTask(HumanGraspTask):
+    """Continuous human position and gripper control. Scoring never drives it.
+
+    No plan, docking, lift, lower or goal-zone release gate is generated here.
+    Tracking loss and rejected motion hold/rebase rather than end a session.
+    """
+    control_mode = 'direct'
+    terminal = ('success', 'failed', 'cancelled', 'finished')
+
+    def finish(self, clock, reason='operator_finished'):
+        if self.stage not in self.terminal:
+            self.reason = reason
+            self._enter('finished', clock, reason)
+
+    def reject_motion(self, reason, human, feedback, clock):
+        if human is not None and human.valid and human.point is not None:
+            self.rebase(human, feedback)
+        else:
+            self.was_missing = True
+        # Log transitions, not identical warnings at camera/control frequency.
+        if not self.events or self.events[-1]['reason'] != reason:
+            self.events.append(dict(time_s=float(clock), previous=self.stage,
+                                    stage=self.stage, reason=reason, recoverable=True))
+        cause = ('Collision check blocked motion' if reason.startswith('task_motion_collision_rejected:')
+                 else 'IK target unreachable' if reason.startswith('cartesian_target_unreachable:')
+                 else 'Camera geometry missing')
+        self.message = cause + ': retreat / adjust / C recenter; retry stays active'
+
+    def update(self, human, feedback, clock, start=False, paused=False, recenter=False):
+        if not np.isfinite(clock) or self.last_clock is not None and clock < self.last_clock:
+            raise ValueError('Task clock must be finite and monotonic')
+        dt = .05 if self.last_clock is None else min(.1, clock - self.last_clock)
+        self.last_clock = clock
+        if self.stage == 'ready' and start:
+            self.start_requested = True
+        hold = TaskCommand('hold', finger=0. if self.holding else .044)
+        if self.stage in self.terminal:
+            return hold
+        if feedback.error:
+            self.fail(feedback.error, clock)
+            return hold
+        if paused:
+            self.candidate = self.candidate_since = self.gesture = None
+            self.was_missing = True
+            self.message = 'PAUSED: reposition your hand, then resume'
+            return hold
+        valid = (human is not None and human.valid and human.point is not None
+                 and np.asarray(human.point).shape == (3,) and np.isfinite(human.point).all()
+                 and np.isfinite(human.capture_s))
+        if not valid:
+            self.gesture = self.candidate = self.candidate_since = None
+            if self.missing_since is None:
+                self.missing_since = clock
+            if clock - self.missing_since >= .35:
+                self.was_missing = True
+            self.message = 'Wrist missing: holding; show shoulders and right wrist to resume'
+            return hold
+        if self.missing_since is not None and clock - self.missing_since >= .35:
+            self.was_missing = True
+        self.missing_since = None
+        if human.gesture_valid:
+            self._gesture(human, clock)
+        else:
+            self.gesture = self.candidate = self.candidate_since = None
+        if self.stage == 'ready':
+            if self.start_requested and self.gesture == 'open':
+                self.started = clock
+                self.start_requested = False
+                self.rebase(human, feedback)
+                self.was_missing = False
+                self._enter('direct', clock, 'human_direct_start')
+            else:
+                self.message = 'Open thumb/index, press SPACE or click START; keep right hand visible'
+            return hold
+        if self.was_missing or recenter:
+            self.rebase(human, feedback)
+            self.was_missing = False
+        if self.gesture in ('open', 'closed'):
+            closed = self.gesture == 'closed'
+            if closed != self.holding:
+                self.holding = closed
+                self.events.append(dict(time_s=float(clock), previous=self.stage, stage=self.stage,
+                                        reason='human_direct_close' if closed else 'human_direct_open'))
+        # Object localization serves collision geometry only, never an arm goal.
+        if feedback.visual is None and not feedback.gripping:
+            self.was_missing = True
+            self.message = 'Robot camera target missing: holding; tracking recovery resumes control'
+            return TaskCommand('hold', finger=0. if self.holding else .044)
+        target = self._follow(human, dt, feedback.tcp)
+        self.message = ('DIRECT: move wrist; PINCH close / OPEN release; missed grasp? open and retry'
+                        if human.gesture_valid else 'DIRECT wrist follow; fingers missing, gripper unchanged')
+        if self.holding and not feedback.gripping:
+            self.message = 'DIRECT closing / grip unconfirmed: OPEN, adjust wrist and PINCH again'
+        return TaskCommand('direct', target, 0. if self.holding else .044, 'human_direct')

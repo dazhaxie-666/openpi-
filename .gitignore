@@ -30,4 +30,5 @@ _archive/
 !/pose2arm-main/videos/*.md
 !/pose2arm-main/videos/.gitkeep
 /4
+/openarm_cloth/calibration/personal_motion/
 
