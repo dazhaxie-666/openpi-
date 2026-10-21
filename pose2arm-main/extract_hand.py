@@ -19,6 +19,7 @@ from mediapipe.tasks.python.core.base_options import BaseOptions
 
 from extract_pose import _delegate_from_name, _model_path, _to_mp_image
 from pose_constants import LANDMARK
+from hand_association import associate_hands
 
 NUM_HAND_LANDMARKS = 21
 THUMB_TIP = 4   # 拇指尖
@@ -84,6 +85,8 @@ def extract_hands_from_video(video_path, pose_norm=None, delegate="cpu"):
     landmarker = _make_hand_landmarker(delegate=delegate)
     world, img, present = [], [], []
     t = 0
+    previous_wrist = np.full((2,2),np.nan)
+    missing_counts = np.zeros(2,dtype=int)
     try:
         while True:
             ok, frame_bgr = cap.read()
@@ -100,20 +103,19 @@ def extract_hands_from_video(video_path, pose_norm=None, delegate="cpu"):
             if pose_norm is not None and t < len(pose_norm):
                 pose_frame = pose_norm[t]
 
-            used = [False, False]
-            for k in range(len(res.hand_landmarks)):
+            wrists = [[lms[WRIST].x,lms[WRIST].y] for lms in res.hand_landmarks]
+            labels = [h[0].category_name if h else "" for h in res.handedness]
+            assignments = associate_hands(wrists,labels,pose_frame,previous_wrist)
+            for k,side in enumerate(assignments):
+                if side is None:
+                    continue
                 lms, wlms = res.hand_landmarks[k], res.hand_world_landmarks[k]
-                label = res.handedness[k][0].category_name if res.handedness[k] else ""
-                wxy = np.array([lms[WRIST].x, lms[WRIST].y])
-                side = _assign_side(wxy, label, pose_frame)
-                if used[side]:            # 同侧重复检测 → 归到另一侧
-                    side = 1 - side
-                    if used[side]:
-                        continue
-                used[side] = True
                 fi[side] = [(l.x, l.y) for l in lms]
                 fw[side] = [(w.x, w.y, w.z) for w in wlms]
                 fp[side] = True
+                previous_wrist[side] = wrists[k]
+            missing_counts = np.where(fp,0,missing_counts+1)
+            previous_wrist[missing_counts>15] = np.nan
 
             world.append(fw)
             img.append(fi)

@@ -1,0 +1,3 @@
+# B simulator plus the A landmark/retarget modules imported by live following.
+-r requirements_simulation.txt
+mediapipe==0.10.35

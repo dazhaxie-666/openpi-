@@ -1,8 +1,0 @@
-name: openpi-pinocchio-py312
-channels:
-  - conda-forge
-dependencies:
-  - python=3.12
-  - pinocchio=4.0
-  - numpy
-  - scipy

@@ -16,13 +16,8 @@ from ik_solver import OpenArmIK  # noqa: E402
 from openarm_common import OPENARM_BASE_OFFSETS  # noqa: E402
 from openarm_live import _segment_distance  # noqa: E402
 from collision_safety import (  # noqa: E402
-    GRIPPER_CLOSE_QPOS, GRIPPER_COL, GRIPPER_OPEN_QPOS,
+    DEFAULT_XML, GRIPPER_CLOSE_QPOS, GRIPPER_COL, GRIPPER_OPEN_QPOS,
     InterArmCollisionProjector)
-
-DEFAULT_XML = Path(
-    r"D:\openpi\openarm_cloth_with_dependencies_20260929\openarm_cloth"
-    r"\official_openarm_mujoco\v2\openarm_bimanual.xml"
-)
 JOINT_NAMES = [
     f"openarm_{side}_joint{i}" for side in ("left", "right") for i in range(1, 8)
 ]

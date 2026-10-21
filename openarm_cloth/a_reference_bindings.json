@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "references": [
+    {
+      "reference_sha256": "320abf885a8e0bbe3e65356e45f6885db0981c9569fb7089e2c5ac03c6d277fc",
+      "source_sha256": "360ec780960b64ec3731b75d939e5cf13f78c951ae451eee9935237bb0bf33ad",
+      "rtmw_sha256": "30be206e70c581937dc4df068594f01eb386ec53178e2275d30de1db373f60ea",
+      "description": "Existing A p2a_test1_rtmw_hybrid_sim: reference-locked arms and RTMW-assisted continuous grip; original clip only"
+    }
+  ]
+}

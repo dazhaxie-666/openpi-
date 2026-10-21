@@ -1,5 +1,9 @@
 # 在 Windows 上应用 pose2arm —— Part1（姿态 → 双臂关节角）操作指南
 
+> 历史 A 工具指南。当前 B 滑动夹爪与执行器应使用根目录 `run.ps1`，不能仅凭同名关节
+> 就把 A 旧旋转夹爪控制值直接发送给 B；当前适配、模式与边界见
+> [项目状态](../PROJECT_STATUS_20261021.md) 和 [统一运行说明](../RUNNING.md)。
+
 > 本指南把 `pose2arm` 的 **纯 Python 部分**（人形姿态 → 双臂 14 维关节角）接入 `openarm_cloth`
 > 项目，让你能用一段预录视频生成驱动 MuJoCo 双臂模型所需的关节角度。
 >
@@ -24,7 +28,7 @@
 ```
 
 关键点：`pose2arm` 的双臂关节名与你 MuJoCo 模型
-([openarm_bimanual.xml](../../openarm_cloth_with_dependencies_20260929/openarm_cloth/official_openarm_mujoco/v2/openarm_bimanual.xml))
+([openarm_bimanual.xml](../openarm_cloth/official_openarm_mujoco/v2/openarm_bimanual.xml))
 中的关节名**完全一致**，因此输出的关节角可以直接 `set` 进 MuJoCo 双臂模型。
 
 ---
@@ -132,7 +136,7 @@ python check_output.py
 把 `joint_angles` 实时/离线喂给你的 MuJoCo 双臂模型，让双臂在仿真里跟随人体动作：
 
 - 输入的 14 维 = 左 7 + 右 7，与
-  [openarm_bimanual.xml](../../openarm_cloth_with_dependencies_20260929/openarm_cloth/official_openarm_mujoco/v2/openarm_bimanual.xml)
+  [openarm_bimanual.xml](../openarm_cloth/official_openarm_mujoco/v2/openarm_bimanual.xml)
   关节名 `openarm_left_joint1..7` / `openarm_right_joint1..7` 一一对应
 - 方法：逐帧 `mjData.qpos` 对应索引赋值后 `mj_forward`，或接入 `position` 控制器
 - （待打开关）写一个桥接脚本在 MuJoCo 场景中回放，确认双臂跟随效果

@@ -592,6 +592,9 @@ def generate_dataset(video_path, out_path, delegate="cpu",
 
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     np.savez(out_path,
+             joint_order=np.array("left-first"),
+             gripper_order=np.array("right-first"),
+             gripper_semantics=np.array("normalized_closure_0_open_1_closed"),
              target_obs=target_obs_all,
              wrist_targets=np.concatenate(
                  [wrist_targets_orig, wrist_targets_mirror], axis=0),

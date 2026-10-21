@@ -108,12 +108,15 @@ class GripperMapper:
         self.open_m = float(open_m)
         self.hold_frames = int(hold_frames)
         self.lost_frames = int(lost_frames)
+        if self.hold_frames < 0 or self.lost_frames < 0:
+            raise ValueError("hold_frames/lost_frames must be nonnegative")
         self.state = 0             # 初始张开（安全侧）
         self._hold_left = 0        # 最小保持剩余帧数
         self._lost_count = 0       # 连续不可测帧计数
 
     def update(self, d) -> int:
-        if d is None or (isinstance(d, float) and np.isnan(d)):
+        # NumPy float32 NaN is not a Python float. It must count as lost too.
+        if d is None or not np.isfinite(d) or d < 0:
             self._lost_count += 1
             if self._lost_count > self.lost_frames and self.state == 1:
                 self.state = 0     # 手消失太久，安全张开
@@ -157,6 +160,8 @@ class ContinuousGripperMapper:
         self.close_ratio = float(close_ratio)
         self.open_ratio = float(open_ratio)
         self.lost_frames = int(lost_frames)
+        if not np.isfinite(fps) or fps <= 0 or self.lost_frames < 0:
+            raise ValueError("fps must be positive and lost_frames nonnegative")
         self._lost = 0
         self._last = 0.0
         self._filter = OneEuroFilter(float(fps), min_cutoff, beta)
@@ -245,6 +250,9 @@ def update_npz(npz_path: Path, D, close_m, open_m, hold_frames, lost_frames,
     gripper[n:, 1] = states["right"][fids[n:]]
 
     d["gripper_cmd"] = gripper
+    d.setdefault("joint_order", np.array("left-first"))
+    d["gripper_order"] = np.array("right-first")
+    d["gripper_semantics"] = np.array("normalized_closure_0_open_1_closed")
     d["gripper_params"] = np.array(
         [close_m, open_m, hold_frames, lost_frames], dtype=np.float32)
     if ratios is not None:

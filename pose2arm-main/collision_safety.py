@@ -9,10 +9,11 @@ import mujoco
 import numpy as np
 
 
-DEFAULT_XML = Path(
-    r"D:\openpi\openarm_cloth_with_dependencies_20260929\openarm_cloth"
-    r"\official_openarm_mujoco\v2\openarm_bimanual.xml"
-)
+DEFAULT_XML = (Path(__file__).resolve().parent.parent /
+               "openarm_cloth/"
+               "official_openarm_mujoco/v2/openarm_bimanual.xml")
+# This is A's historical hinge-gripper model, kept for old NPZ diagnostics.
+# Actual B slide-gripper execution uses member_b_scene / live_motion_scene.
 GRIPPER_OPEN_QPOS = {"left": 0.7854, "right": -0.7854}
 GRIPPER_CLOSE_QPOS = {"left": 0.0, "right": 0.0}
 GRIPPER_COL = {"right": 0, "left": 1}
@@ -37,7 +38,7 @@ class InterArmCollisionProjector:
 
     def __init__(self, xml_path: Path = DEFAULT_XML, margin: float = 0.005,
                  sweep_samples: int = 24, bisection_steps: int = 14):
-        if margin < 0:
+        if not np.isfinite(margin) or margin < 0:
             raise ValueError("collision margin must be non-negative")
         self.model = mujoco.MjModel.from_xml_path(str(xml_path))
         self.data = mujoco.MjData(self.model)
@@ -79,9 +80,14 @@ class InterArmCollisionProjector:
             self.model, mujoco.mjtObj.mjOBJ_BODY, body_id)
 
     def _write_pose(self, q: np.ndarray, grip: np.ndarray | None = None) -> None:
-        self.data.qpos[self.qpos_addresses] = np.asarray(q, dtype=float)
+        q = np.asarray(q, dtype=float)
+        if q.shape != (14,) or not np.isfinite(q).all():
+            raise ValueError("collision input must contain 14 finite joint angles")
+        self.data.qpos[self.qpos_addresses] = q
         if grip is not None:
             grip = np.asarray(grip, dtype=float)
+            if grip.shape != (2,) or not np.isfinite(grip).all() or np.any((grip < 0) | (grip > 1)):
+                raise ValueError("gripper collision state must be finite normalized [right,left]")
             for side in ("left", "right"):
                 closure = float(np.clip(grip[GRIPPER_COL[side]], 0.0, 1.0))
                 target = (GRIPPER_OPEN_QPOS[side]

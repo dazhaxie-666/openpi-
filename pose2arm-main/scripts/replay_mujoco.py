@@ -22,6 +22,7 @@ openarm_bimanual.xml 双臂模型，让机械臂在仿真里跟随人体动作�
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
@@ -31,10 +32,11 @@ import mujoco.viewer
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_XML = Path(
-    r"d:\openpi\openarm_cloth_with_dependencies_20260929\openarm_cloth"
-    r"\official_openarm_mujoco\v2\openarm_bimanual.xml"
-)
+sys.path.insert(0,str(REPO_ROOT))
+from replay_controls import configure_replay_camera
+DEFAULT_XML = (REPO_ROOT.parent /
+               "openarm_cloth/"
+               "official_openarm_mujoco/v2/openarm_bimanual.xml")
 DEFAULT_VIDEO = REPO_ROOT / "videos" / "waving_demo.mp4"
 
 JOINT_NAMES = [f"openarm_{side}_joint{i}" for side in ("left", "right")
@@ -46,6 +48,19 @@ GRIPPER_CLOSE_QPOS = {"left": 0.0,    "right": 0.0}       # 全闭合
 GRIPPER_COL = {"right": 0, "left": 1}  # gripper_cmd 列序 [右臂, 左臂]
 
 CV_WIN = "pose2arm replay - source video (q to quit)"
+
+
+def physics_steps_for_frame(index, period, timestep):
+    """Carry fractional steps across frames instead of advancing just once."""
+    if index < 0 or not np.isfinite(period) or not np.isfinite(timestep) or period <= 0 or timestep <= 0:
+        raise ValueError("invalid physics clock")
+    return int(np.floor((index+1)*period/timestep+1e-9)-np.floor(index*period/timestep+1e-9))
+
+
+def validate_position_actuators(model, ids):
+    for aid in ids:
+        if model.actuator_gainprm[aid,0] <= 0 or model.actuator_biasprm[aid,1] >= 0:
+            raise ValueError("A dynamic replay requires POSITION servos; use B driver for torque-controlled models")
 
 # ── 场景美化: 仅注入 skybox 背景色 + 灯光（无地面） ───────────────────────────
 # 配色方案: key = --bg 参数值。机械臂材质亮度: matte_black≈0.25, silver≈0.65-0.75
@@ -236,6 +251,7 @@ def main() -> None:
         if (ctrl_ids < 0).any():
             missing = [JOINT_NAMES[k] for k, c in enumerate(ctrl_ids) if c < 0]
             raise SystemExit(f"以下关节无对应执行器，--dynamic 不可用: {missing}")
+        validate_position_actuators(model, ctrl_ids)
 
     # ── 夹爪配置 ────────────────────────────────────────────────────────────────
     driven = ["right", "left"] if args.gripper_side == "both" else [args.gripper_side]
@@ -244,6 +260,8 @@ def main() -> None:
     if args.dynamic and any(grip_ctrl[s] is None for s in driven):
         missing = [s for s in driven if grip_ctrl[s] is None]
         raise SystemExit(f"以下侧夹爪无位置执行器，--dynamic 下无法驱动: {missing}")
+    if args.dynamic:
+        validate_position_actuators(model, [grip_ctrl[s] for s in driven])
 
     # 未驱动侧夹爪初始化为全张开（qpos/ctrl 默认 0 = 全闭合，避免静止臂显示为捏死）
     for s in ("right", "left"):
@@ -306,12 +324,10 @@ def main() -> None:
     print(f"[MODE] {'dynamic (position ctrl + mj_step)' if args.dynamic else 'kinematic (qpos + mj_forward)'}")
 
     mirror = args.clip in ("mirror", "all")
+    physical_frame = 0
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.lookat[:] = [0.0, 0.0, 0.30]
-        viewer.cam.distance = 1.3
-        viewer.cam.azimuth = 90
-        viewer.cam.elevation = -20
+        configure_replay_camera(viewer)
         viewer.sync()
 
         while viewer.is_running():
@@ -324,10 +340,8 @@ def main() -> None:
 
                 if args.dynamic:
                     data.ctrl[ctrl_ids] = frame
-                    mujoco.mj_step(model, data)
                 else:
                     data.qpos[qpos_ids] = frame
-                    mujoco.mj_forward(model, data)
 
                 # 夹爪驱动（斜坡限速趋近目标）
                 for s in driven:
@@ -341,6 +355,14 @@ def main() -> None:
                     if grip_prev[s] is not None and tgt != grip_prev[s]:
                         grip_switches[s] += 1
                     grip_prev[s] = tgt
+
+                # Write arm AND gripper commands before the physics interval.
+                if args.dynamic:
+                    for _ in range(physics_steps_for_frame(physical_frame, dt, model.opt.timestep)):
+                        mujoco.mj_step(model, data)
+                    physical_frame += 1
+                else:
+                    mujoco.mj_forward(model, data)
 
                 viewer.sync()
 
