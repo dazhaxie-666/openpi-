@@ -39,6 +39,21 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 & .\run.ps1 -Mode live -ScriptArgs '--no-save-video'
 ```
 
+## 新增：真人意图驱动单臂抓取与放置
+
+```powershell
+# 现场看仿真反馈操作右手；首次可给 60 秒熟悉，默认正式时限 15 秒
+& .\run.ps1 -Mode human-task -ScriptArgs '--camera','0','--timeout','60'
+# 无真人的软件输入闭环检查，报告明确标记 synthetic，不算真人成功
+& .\run.ps1 -Mode human-task -ScriptArgs '--check','--scripted-check'
+```
+
+张开手后空格开始，移动接近 → 捏合并保持 → 抬升后搬运 → 在绿色区张手。
+C 重定位、空格暂停、Q 退出。原始人体视频只在 `--save-human-video` 时本地保存。
+有真实操作视频时可传 `--video <绝对路径>`；自由摆臂视频不能代替抓取示范。
+数据校验、状态/动作回放与能力边界见
+[任务控制器说明](openarm_cloth/docs/human_task_20261021_CN.md)。
+
 ## A→B 物理回放
 
 这里是旧的关节轨迹回放。视频示范参与 B 视觉抓取请使用下方的融合入口。

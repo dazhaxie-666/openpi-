@@ -16,8 +16,9 @@ from demo_grasp_viewer import (load_chest_calibration,load_workspace_rgbd_calibr
 
 
 class BVisualObserver:
-    def __init__(self,model,specs):
+    def __init__(self,model,specs,camera_sides=(None,'left','right')):
         self.model=model;self.specs=specs
+        self.camera_sides=tuple(camera_sides)
         self.chest_transform,self.chest_matrix,_=load_chest_calibration()
         self.calibration=load_workspace_rgbd_calibration()
         self.chest=mujoco.Renderer(model,480,640);self.wrist=mujoco.Renderer(model,240,320)
@@ -26,7 +27,7 @@ class BVisualObserver:
 
     def observe(self,data,clock):
         measured=[];self.attempts=[]
-        for side in (None,'left','right'):
+        for side in self.camera_sides:
             try:
                 if side is None:
                     camera='chest_d435i_preview';renderer=self.chest

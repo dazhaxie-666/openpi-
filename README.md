@@ -25,6 +25,9 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 # 真人摄像头双臂跟随
 & .\run.ps1 -Mode live
 
+# 新增：右手意图驱动方块抓取、搬运、放置；空格开始
+& .\run.ps1 -Mode human-task -ScriptArgs '--timeout','60'
+
 # 同一个 B 环境中的资源检查、完整回归
 & .\run.ps1 -Mode check
 & .\run.ps1 -Mode test
@@ -52,6 +55,9 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 ## 当前范围
 
 人体动作复现与几何视觉抓取已共存，但仍是**独立运行模式**，不是已训练的完整任务策略。
+另新增独立 `human-task` 共享控制任务入口，已验证明确标记的软件手势闭环；
+USB 真人操作验收仍待完成，不能把自动检查 PASS 计为真人示范成功。
+用法与数据/回放说明见 [任务控制器](openarm_cloth/docs/human_task_20261021_CN.md)。
 默认 `fusion` 是纯动作运动学回放；`--execution dynamic` 才测试仿真执行器。
 `tabletop` 使用 RGB-D 几何识别方块/长方体/竖直圆柱，当前每次物理演示一个目标。
 没有承诺任意物体、任意摆位、多人/遮挡精度、全程安全、零抖动或实体硬件效果。

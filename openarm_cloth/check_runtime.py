@@ -33,7 +33,8 @@ def main():
     for name in ('member_b_scene', 'live_motion_scene', 'human_teleop_core',
                  'retarget', 'hand_association', 'rrt_connect_planner', 'collision_safety',
                  'tabletop_perception', 'tabletop_fixture', 'generic_object_scene',
-                 'generic_grasp_planner', 'demo_tabletop_objects'):
+                 'generic_grasp_planner', 'demo_tabletop_objects', 'human_grasp_task',
+                 'human_task_robot', 'run_human_task', 'replay_human_task', 'validate_human_task'):
         path = Path(importlib.import_module(name).__file__).resolve()
         if not path.is_relative_to(checkout):
             raise RuntimeError(f'Stale import {name}: {path}')

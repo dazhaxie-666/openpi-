@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('live', 'replay', 'grasp', 'tabletop', 'tabletop-ui', 'tabletop-check', 'fusion', 'landmark-fusion', 'fusion-replay', 'video-skill', 'check', 'test', 'python')]
+    [ValidateSet('live', 'human-task', 'human-task-replay', 'human-task-validate', 'replay', 'grasp', 'tabletop', 'tabletop-ui', 'tabletop-check', 'fusion', 'landmark-fusion', 'fusion-replay', 'video-skill', 'check', 'test', 'python')]
     [string]$Mode = 'fusion',
     [string]$Python,
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -50,6 +50,9 @@ Push-Location -LiteralPath $taskB
 try {
     switch ($Mode) {
         'live'   { & $Python -u (Join-Path $taskB 'live_bimanual_human.py') @ScriptArgs }
+        'human-task' { & $Python -u (Join-Path $taskB 'run_human_task.py') @ScriptArgs }
+        'human-task-replay' { & $Python -u (Join-Path $taskB 'replay_human_task.py') @ScriptArgs }
+        'human-task-validate' { & $Python -u (Join-Path $taskB 'validate_human_task.py') @ScriptArgs }
         'replay' { & $Python -u (Join-Path $taskB 'demo_member_ab.py') @ScriptArgs }
         'fusion' { & $Python -u (Join-Path $taskB 'run_a_reference_on_b.py') @ScriptArgs }
         'landmark-fusion' { & $Python -u (Join-Path $taskB 'run_fused_motion.py') @ScriptArgs }
