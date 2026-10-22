@@ -430,7 +430,7 @@ class DirectHumanTask(HumanGraspTask):
             return TaskCommand('hold', finger=0. if self.holding else .044)
         target = self._follow(human, dt, feedback.tcp)
         self.message = ('DIRECT: move wrist; PINCH close / OPEN release; missed grasp? open and retry'
-                        if human.gesture_valid else 'DIRECT wrist follow; fingers missing, gripper unchanged')
+                        if human.gesture_valid else 'DIRECT wrist follow; FINGERS MISSING — keep thumb/index visible, gripper unchanged')
         if self.holding and not feedback.gripping:
             self.message = 'DIRECT closing / grip unconfirmed: OPEN, adjust wrist and PINCH again'
         return TaskCommand('direct', target, 0. if self.holding else .044, 'human_direct')

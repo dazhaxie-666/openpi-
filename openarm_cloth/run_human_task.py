@@ -192,6 +192,8 @@ def run(args):
         raise ValueError('--max-wait must be positive')
     if args.check_steps < 1:
         raise ValueError('--check-steps must be positive')
+    if not 0 < args.hand_confidence <= 1:
+        raise ValueError('--hand-confidence must be in (0, 1]')
     cv2.setNumThreads(1)
     direct = args.control == 'direct'
     use_a = direct and args.mapping == 'pose2arm'
@@ -210,6 +212,7 @@ def run(args):
                     human_validation_performed=False, training_performed=False,
                     synthetic_input=bool(args.scripted_check), side='right',
                     human_side='right', robot_side='right', pose_model=args.pose_model, camera_device=args.camera,
+                    hand_confidence=args.hand_confidence,
                     motion_mapping='pose2arm_original_online' if use_a else 'relative_wrist',
                     controlled_arms=list(active_sides), a_reference_order='left-first',
                     a_reference_execution='B dynamic actuator targets; no second Cartesian IK' if use_a else None,
@@ -303,7 +306,8 @@ def run(args):
                 metadata.update(source_video=str(path), source_sha256=hashlib.file_digest(video_file, 'sha256').hexdigest())
         elif not args.scripted_check:
             from live_bimanual_stream import BimanualHumanStream
-            stream = BimanualHumanStream(args.camera, args.pose_model, (1280, 720))
+            stream = BimanualHumanStream(args.camera, args.pose_model, (1280, 720),
+                                         hand_confidence=args.hand_confidence)
         metadata.update(nq=model.nq, nv=model.nv, nu=model.nu, timestep_s=float(model.opt.timestep),
                         robot_joint_names=[model.joint(i).name for i in range(model.njnt)],
                         robot_qpos_index={s: spec.qpos.tolist() for s, spec in robot.control.specs.items()},
@@ -598,6 +602,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--camera', type=int, default=0)
     parser.add_argument('--pose-model', choices=('lite', 'full', 'heavy'), default='full')
+    parser.add_argument('--hand-confidence', type=float, default=.5,
+                        help='MediaPipe hand detection/presence/tracking confidence; lower (e.g. .35) for back-of-hand recall')
     parser.add_argument('--torso-mode',choices=('auto','full_body','upper_body','original'),default='auto')
     parser.add_argument('--wrist-mode',choices=('full','twist','off'),default='full')
     parser.add_argument('--gripper-mode',choices=('continuous','binary','hold'),default='continuous')

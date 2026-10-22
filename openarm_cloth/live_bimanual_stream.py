@@ -137,8 +137,10 @@ def full_inference(mp,detector,image,timestamp):
 
 
 class BimanualHumanStream:
-    def __init__(self,device=0,pose_model='full',resolution=(1280,720),camera_factory=None):
+    def __init__(self,device=0,pose_model='full',resolution=(1280,720),camera_factory=None,hand_confidence=.5):
         self.latest=None;self.error=None;self.camera=None;self.closed=False;self.metadata={}
+        self.hand_confidence=float(hand_confidence)
+        if not 0<self.hand_confidence<=1:raise ValueError('hand_confidence must be in (0, 1]')
         self.lock=threading.Lock();self.device=device;self.pose_model=pose_model;self.resolution=resolution
         self.camera_factory=camera_factory;self.finished=False
         self.thread=threading.Thread(target=self._run,daemon=True);self.thread.start()
@@ -156,13 +158,20 @@ class BimanualHumanStream:
             with ExitStack() as stack:
                 pose=stack.enter_context(vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
                     base_options=options(f'pose_landmarker_{self.pose_model}.task'),running_mode=vision.RunningMode.VIDEO,num_poses=1)))
+                # MediaPipe's palm detector is less confident when the back of
+                # the hand faces the camera. Lower thresholds increase recall;
+                # geometry/consistency checks below still reject bad candidates.
+                hand_gate=dict(min_hand_detection_confidence=self.hand_confidence,
+                               min_hand_presence_confidence=self.hand_confidence,
+                               min_tracking_confidence=self.hand_confidence)
                 hands=stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2)))
+                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2,**hand_gate)))
                 roi={s:stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1))) for s in SIDES}
+                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**hand_gate))) for s in SIDES}
                 pool=stack.enter_context(ThreadPoolExecutor(max_workers=4))
                 self.camera=(self.camera_factory or USBLatestFrame)(self.device,*self.resolution,30)
                 self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),
+                                   hand_detection_confidence=self.hand_confidence,
                                    identity='anatomical left -> robot left, right -> right; preview mirror only',
                                    hand_search='square ROI + parallel full-frame; fresh body wrist + hand geometry + two-frame confirmation',
                                    observation_gate='body/hand wrist consistency; missing anchors never use handedness fallback',
