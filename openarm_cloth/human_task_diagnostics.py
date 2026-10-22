@@ -18,7 +18,7 @@ def diagnostic_phase(elapsed):
 def diagnostic_fields(task,command):
     trace=getattr(task,'motion_trace',{}) or {}
     result={name:np.asarray(trace[name]).copy() if name in trace else np.full(3,np.nan)
-            for name in ('human_anchor','robot_anchor','unclipped_goal','workspace_goal','lead_goal')}
+            for name in ('human_anchor','robot_anchor','unclipped_goal','workspace_goal','lead_goal','workspace_anchor_shift')}
     result['workspace_clipped']=np.asarray(trace.get('workspace_clipped',[False]*3),dtype=bool)
     result['command_target']=np.asarray(command.target).copy() if command.target is not None else np.full(3,np.nan)
     result['motion_trace_valid']=np.asarray(bool(trace))
@@ -37,4 +37,5 @@ def diagnostic_summary(rows,video):
             hand_valid_fraction=float(np.mean([r['human_hand_valid'] for r in group])),
             clipped_axis_control_rows=np.sum([r['workspace_clipped'] for r in group],axis=0).tolist())
     return dict(scope='control timing and operator prompts; not independent gesture accuracy or exposure-to-motion latency',
-        frames=len(rows),timing_ms=timing,phases=phases,axis_order='robot x forward, y left, z up',video=video)
+        frames=len(rows),timing_ms=timing,preview_render_rows=sum(bool(r.get('ui_refreshed',False)) for r in rows),
+        phases=phases,axis_order='robot x forward, y left, z up',video=video)

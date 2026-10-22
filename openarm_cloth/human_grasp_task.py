@@ -176,12 +176,21 @@ class HumanGraspTask:
         goal = self.robot_anchor + self.config.gain * (human.point - self.human_anchor)
         tracing=getattr(self,'record_motion_trace',False)
         unclipped=goal.copy() if tracing else None
+        anchor_before=self.human_anchor.copy() if tracing else None
+        anchor_shift=np.zeros(3)
+        if getattr(self,'workspace_anti_windup',False):
+            # Discard only unreachable displacement, independently per axis.
+            # Keep the target lead and speed limits below: actuator lag is not
+            # a workspace boundary and must not move the human's anchor.
+            anchor_shift=(goal-np.clip(goal,self.config.lower,self.config.upper))/self.config.gain
+            self.human_anchor+=anchor_shift
         goal = np.clip(goal, self.config.lower, self.config.upper)
         workspace_goal=goal.copy() if tracing else None
         lead = goal - actual_tcp
         goal = actual_tcp + lead * min(1., self.config.max_target_lead_m / max(np.linalg.norm(lead), 1e-12))
         if tracing:
-            self.motion_trace=dict(human_anchor=self.human_anchor.copy(),robot_anchor=self.robot_anchor.copy(),
+            self.motion_trace=dict(human_anchor=anchor_before,workspace_anchor_shift=anchor_shift,
+                robot_anchor=self.robot_anchor.copy(),
                 unclipped_goal=unclipped,workspace_goal=workspace_goal,
                 workspace_clipped=np.abs(unclipped-workspace_goal)>1e-9,lead_goal=goal.copy())
         delta = goal - self.target
@@ -353,6 +362,7 @@ class DirectHumanTask(HumanGraspTask):
     No plan, docking, lift, lower or goal-zone release gate is generated here.
     Tracking loss and rejected motion hold/rebase rather than end a session.
     """
+    workspace_anti_windup=True
     control_mode = 'direct'
     terminal = ('success', 'failed', 'cancelled', 'finished')
 

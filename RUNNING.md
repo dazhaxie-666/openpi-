@@ -75,6 +75,8 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 B 保留桌面/物块接触检查，受阻侧限步或保持，另一侧及夹爪独立处理；评分仍只看右臂任务。
 `--arms right` 仅控制右臂；`--mapping wrist` 保留此前小工作区手腕位置控制。
 桌面末端位置操作可用 `--mapping wrist --gripper-mode continuous`，现在也使用个人捏合端点与连续开度；G 合拢/O 张开各至少 10 次，每次保持 1.2 秒。
+
+手腕直接模式到工作区边界后不再累积越界位移，返向目标可立即响应。预览默认最多10 Hz，键盘每个控制周期处理；可加 `--preview-hz 5` 降低显示负担。平时不需要机器人 PNG 数据时可加 `--no-images`，诊断录制会自动关闭这些 PNG。未标定时屏幕有黄色 G/O 提示，启动日志打印实际标定路径；达到 `CALIBRATION READY` 后 Q 保存。详见 [边界响应及预览修复](openarm_cloth/docs/wrist_boundary_preview_fix_20261022_CN.md)。
 试次数达标后还须看到 `CALIBRATION READY`；`NOT READY` 应按原因处理。若提示 `LABELS REVERSED`，换新个人文件重新采样，G=指尖接触，O=两指分开。
 坐站切换后完整入镜仍漏检时，按 R 暂停并重新创建人体/手部视觉跟踪器，等 `VISION REACQUIRING` 消失后检查识别状态。恢复后按空格继续；C 仅重置动作映射，不能替代视觉重识别。若 R 后仍漏检，用 `--save-human-video` 在本地记录一次坐站切换，详见 [站姿诊断流程](openarm_cloth/docs/standing_observation_fix_20261022_CN.md)。
 若人体骨架整体消失或落到背景，先做不加载仿真的摄像头诊断：`& .\run.ps1 -Mode python -ScriptArgs 'diagnose_human_tracking.py','--seconds','35','--save-video','--compare'`。1 标记坐姿、2 标记站姿、R 重识别、Q 保存后对同一录像离线比较检测模式；具体证据边界见上述流程。

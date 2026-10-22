@@ -24,7 +24,7 @@ from task_workspace import TABLE_TOP, CONFIG
 from demo_grasp_viewer import place_cube_for_blind_test
 from human_pinch_control import TaskHandControl,save_personal_calibration,load_personal_calibration,calibration_status
 from live_bimanual_stream import hand_landmarker_thresholds,apply_vision_reacquire
-from human_task_preview import compose_task_preview
+from human_task_preview import compose_task_preview,PreviewCadence,poll_task_preview,calibration_prompt
 from human_task_diagnostics import diagnostic_phase,diagnostic_fields,diagnostic_summary
 
 
@@ -243,6 +243,8 @@ def run(args):
         raise ValueError('--max-wait must be positive')
     if args.check_steps < 1:
         raise ValueError('--check-steps must be positive')
+    preview_hz=float(getattr(args,'preview_hz',10.))
+    preview_cadence=PreviewCadence(preview_hz)
     hand_thresholds=hand_landmarker_thresholds(args.hand_confidence,args.hand_presence_confidence,args.hand_tracking_confidence)
     cv2.setNumThreads(1)
     direct = args.control == 'direct'
@@ -286,6 +288,8 @@ def run(args):
                     diagnostic_recording=diagnostic,diagnostic_seconds=diagnostic_seconds if diagnostic else None,
                     human_video_layout='human_diagnostic/: chunked video + source timestamp CSV' if diagnostic else 'human_camera.mp4',
                     preview_mirrored=bool(args.mirror_preview),
+                    preview_hz=preview_hz,preview_policy='latest frame; input events polled every control tick',
+                    workspace_anti_windup=bool(direct and not use_a),
                     result_window_enabled=not args.check and not args.close_on_finish,
                     human_validity='human_valid = pose AND gesture; separate human_pose_valid and human_hand_valid recorded',
                     cameras=[] if args.no_images else ['chest_d435i_preview', 'v22_right_d405_rgb'],
@@ -295,7 +299,7 @@ def run(args):
                         'live_bimanual_stream.py', 'full_video_source.py', 'pose2arm_task_mapping.py',
                         'live_reference_conditioning.py','live_observation_quality.py',
                         'motion_observation.py','human_wrist_control.py','human_pinch_control.py',
-                        'human_task_diagnostics.py','live_test_dataset.py')})
+                        'human_task_diagnostics.py','human_task_preview.py','live_test_dataset.py')})
     if use_a:
         metadata['a_source_hashes']={name:hashlib.sha256((ROOT.parent/'pose2arm-main'/name).read_bytes()).hexdigest()
                                     for name in ('openarm_live.py','retarget.py','ik_solver.py','smoothing.py','openarm_common.py')}
@@ -418,6 +422,10 @@ def run(args):
             print(('SPACE or click START: a visible wrist starts direct control; fingers are optional.' if direct else
                    'Open hand for 0.2 s, then SPACE or click START.')+
                   ' C recenter; R pauses and restarts vision; SPACE resumes; M mirror; Q exit.', flush=True)
+            if direct:
+                print('PERSONAL GRIPPER calibration: '+str(args.calibration.resolve())+
+                      ' | G pinch / O spread x10 each; hold 1.2s; READY means valid endpoints, Q saves.',flush=True)
+            print(f'PREVIEW at most {preview_hz:g} Hz; control target 20 Hz; keyboard polled every control tick.',flush=True)
             index = 0
             expected_sim_time = float(data.time)
             while not flags['quit'] and task.stage not in task.terminal:
@@ -639,7 +647,8 @@ def run(args):
                 if diagnostic and task.started is not None and clock-task.started>=diagnostic_seconds:
                     task.finish(clock,'diagnostic_duration_reached')
                 ui_start=time.perf_counter()
-                if viewer is not None:
+                ui_refreshed=viewer is not None and preview_cadence.due(ui_start)
+                if ui_refreshed:
                     frame = np.full((540, 960, 3), 45, np.uint8) if obs is None or 'image' not in obs else cv2.resize(obs['image'], (960, 540))
                     if source_preview is not None and obs is not None:
                         frame = cv2.resize(source_preview.frame(obs['seq']), (960, 540))
@@ -674,17 +683,16 @@ def run(args):
                         lines.append('DIAGNOSTIC: '+phase.upper())
                         if diagnostic_recorder:lines.append('VIDEO dropped='+str(diagnostic_recorder.dropped_rows)+' error='+str(diagnostic_recorder.error))
                     frame=compose_task_preview(frame,lines,task.stage,flags['paused'],task.start_requested,direct=direct,
-                        prompt=prompt if diagnostic else None)
+                        prompt=prompt if diagnostic else None,
+                        calibration_warning=calibration_prompt(calibration) if direct else None)
                     button = 'START' if task.stage == 'ready' else 'RESUME' if flags['paused'] else 'PAUSE'
                     cv2.rectangle(frame, (12, 488), (235, 530), (45, 160, 45), -1)
                     cv2.putText(frame, button, (28, 518), cv2.FONT_HERSHEY_SIMPLEX, .8, (255, 255, 255), 2)
                     cv2.imshow(window, frame)
-                    code = cv2.waitKey(1) & 255
-                    if code != 255:
-                        key(code)
-                    if cv2.getWindowProperty(window, cv2.WND_PROP_VISIBLE) < 1:
-                        flags['quit'] = True
                     viewer.sync()
+                if viewer is not None and not poll_task_preview(window,key):
+                    flags['quit']=True
+                row['ui_refreshed']=np.asarray(ui_refreshed)
                 row['ui_ms']=np.asarray((time.perf_counter()-ui_start)*1000)
                 if index % 20 == 0:
                     print(f'TASK {task.stage} | source {human.seq} | {task.message}', flush=True)
@@ -812,6 +820,7 @@ def main():
     parser.add_argument('--save-human-video', action='store_true', help='Opt in to LOCAL raw human video')
     parser.add_argument('--diagnostic-recording',action='store_true',help='Opt in to local asynchronous human video + guided axis/pinch trace; disables PNG recording')
     parser.add_argument('--diagnostic-seconds',type=float,default=65.,help='Active seconds after START before diagnostic session saves and ends')
+    parser.add_argument('--preview-hz',type=float,default=10.,help='Maximum camera/3D preview refresh rate; keyboard still polled every control tick')
     parser.add_argument('--mirror-preview', action=argparse.BooleanOptionalAction, default=True,
                         help='Mirror preview only; detection, anatomical identity and raw recordings stay unchanged. M toggles.')
     parser.add_argument('--close-on-finish', action='store_true',

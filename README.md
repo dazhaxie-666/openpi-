@@ -13,6 +13,8 @@
 最新录像改善了坐站入镜范围；生产观测增加高置信倒置躯干拦截，避免错误骨架继续驱动机械臂。回测指标与限制见 [录像复核与调整](openarm_cloth/docs/standing_video_adjustment_20261022_CN.md)。
 直接遥操现在只要求明确 START 与有效手腕即可开始，手指缺失保持夹爪，不再阻塞手腕启动；摄像头状态改为独立深色面板。见 [启动与文字显示修复](openarm_cloth/docs/direct_start_preview_fix_20261022_CN.md)。
 需要分析卡顿/前后轴/手背识别时，增加 `--diagnostic-recording`，录制后台人体视频、分轴目标链路和各环节耗时，带65秒操作提示及自动保存。见 [诊断录制](openarm_cloth/docs/guided_diagnostic_recording_20261022_CN.md)。
+
+手腕直接模式现已丢弃工作区外的多余位移，减轻越界后返向空走；预览默认限频10 Hz，未标定夹爪显示黄色提示。操作与验证边界见 [边界响应及预览修复](openarm_cloth/docs/wrist_boundary_preview_fix_20261022_CN.md)。
 新克隆不包含本机视频、模型权重和 outputs；示范回放需另行准备对应数据。
 
 ## 快速开始
