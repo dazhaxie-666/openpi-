@@ -35,6 +35,19 @@ def body_hand_consistency(pose,candidates,image_size=(1280,720),require_elbow=Tr
     trusted={s:False for s in SIDES};reasons={s:'body missing' for s in SIDES}
     if pose is None or np.shape(pose)!=(33,4):return trusted,reasons
     wh=np.asarray(image_size,dtype=float)
+    # Sitting/standing teleoperation can occasionally hallucinate a complete
+    # upside-down body on a shirt/palm with high landmark visibility. Require
+    # both a credible face BELOW shoulders and visible hips ABOVE shoulders;
+    # low-confidence/missing face or hips cannot trigger this rejection.
+    ids=[0,7,8,11,12,23,24]
+    if np.isfinite(pose[ids]).all() and np.min(pose[ids,3])>=.65:
+        shoulder_y=np.mean(pose[[11,12],1])*wh[1]
+        width=np.linalg.norm((pose[11,:2]-pose[12,:2])*wh)
+        margin=max(12.*wh[1]/720.,.15*width)
+        face_span=np.linalg.norm((pose[7,:2]-pose[8,:2])*wh)
+        if (face_span>=6.*wh[1]/720. and pose[0,1]*wh[1]>shoulder_y+margin
+                and np.mean(pose[[23,24],1])*wh[1]<shoulder_y-margin):
+            return trusted,{s:'body torso inverted' for s in SIDES}
     unique=[]
     for c in candidates:
         if credible_hand(c,image_size) and not any(np.linalg.norm((c['wrist']-d['wrist'])*wh)<25.*wh[1]/720. for d in unique):unique.append(c)

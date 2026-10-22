@@ -110,6 +110,8 @@ def tracking_diagnostic(obs, human, now_s, source_clock=False):
         reason = 'WRIST_LOW_CONFIDENCE'
     elif obs.get('position_quality',{}).get('right')=='body/hand wrist disagreement':
         reason = 'BODY_HAND_WRIST_DISAGREEMENT'
+    elif obs.get('position_quality',{}).get('right')=='body torso inverted':
+        reason = 'BODY_TORSO_INVERTED'
     elif not np.isfinite(pose[[23,24]]).all():
         reason = 'TORSO_REFERENCE_INVALID'
     elif (np.linalg.norm(pose[12,:3]-pose[11,:3])<.05
