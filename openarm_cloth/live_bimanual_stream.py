@@ -145,17 +145,46 @@ def hand_landmarker_thresholds(confidence=.5,presence=None,tracking=None):
     return values
 
 
+def apply_vision_reacquire(flags,stream,mapping=None):
+    """Explicit recovery holds execution until the operator resumes with SPACE."""
+    if not flags.get('reacquire'):return False
+    flags['reacquire']=False
+    if stream is None:return False
+    flags['paused']=True
+    flags['calibrate']=None
+    stream.request_reacquire()
+    if mapping is not None:mapping.reset()
+    return True
+
+
 class BimanualHumanStream:
     def __init__(self,device=0,pose_model='full',resolution=(1280,720),camera_factory=None,
                  hand_confidence=.5,hand_presence_confidence=None,hand_tracking_confidence=None):
         self.latest=None;self.error=None;self.camera=None;self.closed=False;self.metadata={}
         self.hand_thresholds=hand_landmarker_thresholds(hand_confidence,hand_presence_confidence,hand_tracking_confidence)
         self.lock=threading.Lock();self.device=device;self.pose_model=pose_model;self.resolution=resolution
+        self.vision_generation=self.requested_generation=0
         self.camera_factory=camera_factory;self.finished=False
         self.thread=threading.Thread(target=self._run,daemon=True);self.thread.start()
 
     def snapshot(self):
         with self.lock: return self.latest
+
+    def request_reacquire(self):
+        """Invalidate old observations immediately; rebuild models in their owner thread.
+
+        Coalesce key repeats while a reset is pending. In-flight inference from
+        an earlier generation cannot republish an observation after this call.
+        """
+        with self.lock:
+            if self.requested_generation==self.vision_generation:self.requested_generation+=1
+            self.latest=None
+            return self.requested_generation
+
+    def vision_status(self):
+        with self.lock:
+            return dict(generation=self.vision_generation,requested=self.requested_generation,
+                        pending=self.vision_generation!=self.requested_generation)
 
     def _run(self):
         try:
@@ -165,18 +194,23 @@ class BimanualHumanStream:
             models=ROOT.parent/'pose2arm-main'/'models'
             def options(name): return python.BaseOptions(model_asset_path=str(models/name))
             with ExitStack() as stack:
-                pose=stack.enter_context(vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
-                    base_options=options(f'pose_landmarker_{self.pose_model}.task'),running_mode=vision.RunningMode.VIDEO,num_poses=1)))
-                hands=stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2,**self.hand_thresholds)))
-                roi={s:stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**self.hand_thresholds))) for s in SIDES}
+                vision_stack=stack.enter_context(ExitStack())
+                def create_landmarkers():
+                    body=vision_stack.enter_context(vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
+                        base_options=options(f'pose_landmarker_{self.pose_model}.task'),running_mode=vision.RunningMode.VIDEO,num_poses=1)))
+                    full=vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+                        base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2,**self.hand_thresholds)))
+                    crops={s:vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+                        base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**self.hand_thresholds))) for s in SIDES}
+                    return body,full,crops
+                pose,hands,roi=create_landmarkers()
                 pool=stack.enter_context(ThreadPoolExecutor(max_workers=4))
                 self.camera=(self.camera_factory or USBLatestFrame)(self.device,*self.resolution,30)
                 self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),hand_thresholds=self.hand_thresholds,
                                    identity='anatomical left -> robot left, right -> right; preview mirror only',
                                    hand_search='square ROI + parallel full-frame; fresh body wrist + hand geometry + two-frame confirmation',
                                    observation_gate='body/hand wrist consistency; missing anchors never use handedness fallback',
+                                   vision_recovery='R: pause + recreate body/full-hand/ROI VIDEO trackers; no automatic resume',
                                    filter_clock='camera return timestamps, not variable inference completion')
                 print('BIMANUAL CAMERA '+str(self.metadata),flush=True)
                 filters={i:VectorOneEuroFilter(3,30,min_cutoff=1.5,beta=4) for i in (11,12,13,14,15,16,23,24)}
@@ -187,7 +221,22 @@ class BimanualHumanStream:
                 previous_velocity=np.zeros((2,2));last_previous=np.full((2,2),np.nan)
                 normals={s:None for s in SIDES};previous_pose=None;previous_hand={s:None for s in SIDES}
                 sequence=0;timestamp=-1;last_infer=None;last_full=0
+                generation=0;reacquire_ms=0.
                 while not self.closed:
+                    with self.lock:requested=self.requested_generation
+                    if requested!=generation:
+                        # Every inference from the previous iteration has been
+                        # joined before models are closed. No extra model runs
+                        # continuously, and old graph resources are released.
+                        reset_start=time.perf_counter_ns()
+                        vision_stack.close();pose,hands,roi=create_landmarkers()
+                        filters={i:VectorOneEuroFilter(3,30,min_cutoff=1.5,beta=4) for i in (11,12,13,14,15,16,23,24)}
+                        hand_filters={s:VectorOneEuroFilter(63,30,min_cutoff=2,beta=5) for s in SIDES}
+                        previous=np.full((2,2),np.nan);seen=np.zeros(2);last_hand={s:None for s in SIDES}
+                        confirmation=ConfirmedHands();previous_velocity=np.zeros((2,2))
+                        normals={s:None for s in SIDES};previous_pose=None;previous_hand={s:None for s in SIDES}
+                        last_infer=None;last_full=0;generation=requested
+                        reacquire_ms=(time.perf_counter_ns()-reset_start)/1e6
                     sequence,read_start,read_end,bgr=self.camera.read_new(sequence)
                     valid_source,source_dt,source_reason=source_clock.accept(sequence,read_end/1e9)
                     if not valid_source:continue
@@ -280,6 +329,7 @@ class BimanualHumanStream:
                             if hn is not None:
                                 for p in hn: cv2.circle(annotated,(int(p[0]*bgr.shape[1]),int(p[1]*bgr.shape[0])),3,color,-1)
                     result=dict(seq=sequence,read_start=read_start,read_end=read_end,infer_start=start,
+                                vision_generation=generation,vision_reacquire_ms=reacquire_ms,
                                 done=time.perf_counter_ns(),arms=arms,raw_image=bgr,image=annotated,
                                 pose_raw=raw,pose_filtered=world,pose_norm=norm,
                                 pose_trusted=pose_trusted,pose_quality=pose_quality,
@@ -288,7 +338,9 @@ class BimanualHumanStream:
                                 captured_sequence=sequence,processed_sources=processed,skipped_capture_sources=skipped,nonmonotonic_sources=source_clock.rejected,
                                 pose_ms=(pose_done-start)/1e6,hand_ms=(hand_done-start)/1e6,
                                 roi_model_ms=np.asarray(roi_times))
-                    with self.lock: self.latest=result
+                    with self.lock:
+                        if generation==self.requested_generation:
+                            self.latest=result;self.vision_generation=generation
         except EOFError:
             self.finished=True
         except Exception:

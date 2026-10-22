@@ -23,7 +23,7 @@ from handeye_grasp_red_cube import finger_joint_indices
 from task_workspace import TABLE_TOP, CONFIG
 from demo_grasp_viewer import place_cube_for_blind_test
 from human_pinch_control import TaskHandControl,save_personal_calibration,load_personal_calibration,calibration_status
-from live_bimanual_stream import hand_landmarker_thresholds
+from live_bimanual_stream import hand_landmarker_thresholds,apply_vision_reacquire
 
 
 def direct_hand_command(command,hand,stage,held_aperture,paused=False):
@@ -96,8 +96,10 @@ def tracking_diagnostic(obs, human, now_s, source_clock=False):
         reason = 'STALE_CAMERA_FRAME'
     elif human.valid:
         reason = 'WRIST_OK'
-    elif pose is None or pose.shape != (33, 4) or not np.isfinite(pose[[11,12,16,23,24]]).all():
+    elif pose is None or pose.shape != (33, 4):
         reason = 'BODY_NOT_DETECTED'
+    elif not np.isfinite(pose[[11,12,16]]).all():
+        reason = 'BODY_LANDMARKS_INVALID'
     elif norm is not None and norm.shape==(33,4) and np.any((norm[16,:2]<0)|(norm[16,:2]>1)):
         reason = 'WRIST_OUT_OF_FRAME'
     elif norm is not None and norm.shape==(33,4) and np.any((norm[[11,12],:2]<0)|(norm[[11,12],:2]>1)):
@@ -108,6 +110,11 @@ def tracking_diagnostic(obs, human, now_s, source_clock=False):
         reason = 'WRIST_LOW_CONFIDENCE'
     elif obs.get('position_quality',{}).get('right')=='body/hand wrist disagreement':
         reason = 'BODY_HAND_WRIST_DISAGREEMENT'
+    elif not np.isfinite(pose[[23,24]]).all():
+        reason = 'TORSO_REFERENCE_INVALID'
+    elif (np.linalg.norm(pose[12,:3]-pose[11,:3])<.05
+          or np.linalg.norm((pose[11,:3]+pose[12,:3]-pose[23,:3]-pose[24,:3])/2)<.05):
+        reason = 'TORSO_REFERENCE_DEGENERATE'
     else:
         reason = 'BODY_FRAME_UNAVAILABLE'
     return reason, age, wrist
@@ -283,23 +290,28 @@ def run(args):
     model = data = robot = evaluator = stream = source = None
     a_mapper = a_worker = hand_tracker = None
     video_writer = None
-    flags = dict(start=False, paused=False, quit=False, recenter=False, mirror=bool(args.mirror_preview),calibrate=None)
+    flags = dict(start=False, paused=False, quit=False, recenter=False, reacquire=False, mirror=bool(args.mirror_preview),calibrate=None)
     failure = None
     clock = cursor = 0.
     dt = .05
     last_human_video_seq = None
-    window = 'HUMAN TASK | SPACE start/pause | C recenter | Q exit'
+    window = 'HUMAN TASK | SPACE start/pause | C recenter | R vision reacquire | Q exit'
 
     def key(code):
         if code in (81, 113, 27):
             flags['quit'] = True
         elif code == 32:
-            if task.stage == 'ready':
+            if flags['paused']:
+                flags['paused']=False
+                if task.stage=='ready':flags['start']=True
+            elif task.stage == 'ready':
                 flags['start'] = True
             else:
                 flags['paused'] = not flags['paused']
         elif code in (67, 99):
             flags['recenter'] = True
+        elif code in (82, 114):
+            flags['reacquire'] = True
         elif code in (77, 109):
             flags['mirror'] = not flags['mirror']
         elif direct and code in (71,103):flags['calibrate']='closed'
@@ -382,11 +394,12 @@ def run(args):
             print('POSE2ARM ORIGINAL: 10 fresh frames calibrate each arm; original A joints drive B. C recalibrates.'
                   if use_a else 'DIRECT: wrist moves arm; PINCH closes, OPEN releases anywhere. Retry freely; Q saves and ends.'
                   if direct else 'ASSISTED: move to cube, PINCH and HOLD; after lift move over GREEN goal, then OPEN.', flush=True)
-            print('Open hand for 0.2 s, SPACE or click START. Request waits for tracking readiness. C recenter, M mirror, Q exit.', flush=True)
+            print('Open hand for 0.2 s, SPACE or click START. C recenter; R pauses and restarts vision; SPACE resumes; M mirror; Q exit.', flush=True)
             index = 0
             expected_sim_time = float(data.time)
             while not flags['quit'] and task.stage not in task.terminal:
                 tick = time.perf_counter()
+                apply_vision_reacquire(flags,stream,a_worker or a_mapper or hand_tracker)
                 if viewer is not None and not viewer.is_running():
                     flags['quit'] = True
                     break
@@ -515,6 +528,8 @@ def run(args):
                            position_observation_reason=np.asarray(obs.get('position_quality',{}).get('right','') if obs else 'NO_OBSERVATION'),
                            arm_observation_reason=np.asarray(obs.get('pose_quality',{}).get('right','') if obs else 'NO_OBSERVATION'),
                            human_pose_norm=np.asarray(obs['pose_norm']).copy() if obs is not None and obs.get('pose_norm') is not None else np.full((33,4),np.nan),
+                           vision_generation=np.asarray(obs.get('vision_generation',0) if obs else -1),
+                           vision_reacquire_ms=np.asarray(obs.get('vision_reacquire_ms',0.) if obs else np.nan),
                            pinch_calibration_state=np.asarray(calibration_status(hand_result['calibration']) if hand_result else calibration_status(a_result.get('pinch_calibration',{}).get('right',{})) if a_result else 'NOT READY'),
                            observation_age_s=np.asarray(observation_age),
                            right_wrist_visibility=np.asarray(wrist_visibility),
@@ -576,7 +591,11 @@ def run(args):
                              f'MIRROR {"ON" if flags["mirror"] else "OFF"} | IK {robot.direct_ik_mode} | ratio {human.pinch_ratio}',
                              ('Task scored PASS; control stays active. Q saves.' if direct and scored else
                               'Time reminder; continue practice or Q to save.' if direct and timeout > 0 and elapsed > timeout else
-                              'SPACE/click START | C recenter | M mirror | Q save/exit')]
+                              'SPACE start/resume | C recenter | R vision reacquire | Q exit')]
+                    if stream is not None:
+                        vs=stream.vision_status()
+                        lines.append(('VISION REACQUIRING - WAIT' if vs['pending'] else 'VISION generation '+str(vs['generation']))
+                                     + (' | PAUSED: SPACE to resume' if flags['paused'] else ''))
                     if direct:
                         pinch_state=hand_result['state'] if hand_result else (a_result.get('module_state',{}).get('right',{}).get('pinch','LOST') if a_result else 'LOST')
                         pinch_reason=hand_result['reason'] if hand_result else (a_result.get('module_reason',{}).get('right',{}).get('pinch','') if a_result else '')

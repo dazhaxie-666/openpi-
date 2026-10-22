@@ -213,6 +213,7 @@ class LatestPose2ArmWorker:
             self.generation+=1
             self.reset_requested=True
             self.pending=self.latest=None
+            self.calibration_request=None
             self.last_submitted=-1
             self.condition.notify()
 

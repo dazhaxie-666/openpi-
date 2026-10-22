@@ -141,6 +141,11 @@ class TaskHandControl:
         if label not in ('closed','open'):raise ValueError('unknown pinch label')
         self.capture=dict(label=label,start=None,samples=[])
 
+    def reset(self):
+        """Discard an interrupted capture/confirmation, retaining endpoints and aperture."""
+        self.capture=None
+        self.missing('VISION_REACQUIRING')
+
     def export_calibration(self):
         return dict(self.profiles,right=self.calibration.export())
 

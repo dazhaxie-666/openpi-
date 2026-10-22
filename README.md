@@ -8,6 +8,7 @@
 操作、验证和未完成的独立验收见 [动作跟随 v2](openarm_cloth/docs/motion_v2_implementation_20261021_CN.md)。
 2026-10-22 接入手部置信度参数，修复手腕位置模式的连续捏合接线与手臂受阻时的夹爪独立更新；见 [手部分支集成](openarm_cloth/docs/direct_hand_branch_integration_20261022_CN.md)。
 后续区分完整手臂与手腕位置的观测要求，并明确显示个人标定是否通过；见 [坐站切换与标定反馈](openarm_cloth/docs/standing_observation_fix_20261022_CN.md)。
+完整入镜仍漏检时，新增 R 暂停并重新创建视觉跟踪器，和 C 动作重标定分开；恢复后须空格继续，说明与本地诊断流程见上述文档。尚未完成这次真人站姿漏检的复现与效果验收。
 新克隆不包含本机视频、模型权重和 outputs；示范回放需另行准备对应数据。
 
 ## 快速开始

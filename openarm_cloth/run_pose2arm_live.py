@@ -11,7 +11,7 @@ import numpy as np
 
 from a_reference_adapter import verify_kinematics
 from live_motion_scene import build_motion_scene
-from live_bimanual_stream import BimanualHumanStream
+from live_bimanual_stream import BimanualHumanStream,apply_vision_reacquire
 from live_test_dataset import TestDatasetRecorder, array_or_nan
 from member_b_scene import ROOT
 from pose2arm_task_mapping import LatestPose2ArmWorker, Pose2ArmTaskMapping, observed_sides, synthetic_pose_observation
@@ -129,13 +129,14 @@ def run(args):
                          gripper_mode=getattr(args,'gripper_mode','continuous'),calibration_path=getattr(args,'calibration',None),model=model,source_dt=True)
     mapper=Pose2ArmTaskMapping(**mapping_options) if args.check else None
     viewer=None;failure=None;last_seq=-1;index=0;timings=[];human_observed=False
-    flags=dict(quit=False,paused=False,reset=False,mirror=True,calibrate=None,episode=False)
+    flags=dict(quit=False,paused=False,reset=False,reacquire=False,mirror=True,calibrate=None,episode=False)
     episode_start=None;episode_number=0
-    window='POSE2ARM + FULL WRIST | C body/wrist reset | G pinch / O open calibration | T 15s test | Q exit'
+    window='POSE2ARM + FULL WRIST | C mapping reset | R vision reacquire | G pinch / O open | Q exit'
     def key(code):
         if code in (81,113,27):flags['quit']=True
         elif code==32:flags['paused']=not flags['paused']
         elif code in (67,99):flags['reset']=True
+        elif code in (82,114):flags['reacquire']=True
         elif code in (77,109):flags['mirror']=not flags['mirror']
         elif code in (71,103):flags['calibrate']='closed'
         elif code in (79,111):flags['calibrate']='open'
@@ -165,6 +166,7 @@ def run(args):
         print('ORIGINAL POSE2ARM -> B BOTH ARMS | 10 fresh frames calibrate | output '+str(out),flush=True)
         while not flags['quit'] and (viewer is None or viewer.is_running()):
             tick=time.perf_counter();now=time.perf_counter_ns()
+            apply_vision_reacquire(flags,stream,mapper or worker)
             if abs(data.time-expected)>1e-7:raise RuntimeError('Viewer reset detected; restart to recalibrate B robot')
             obs=synthetic_pose_observation(index,index*.05) if args.check else stream.snapshot()
             if flags['reset']:
@@ -212,6 +214,8 @@ def run(args):
                 pose_raw=array_or_nan(obs.get('pose_raw') if obs else None,(33,4)),
                 pose_filtered=array_or_nan(obs.get('pose_filtered') if obs else None,(33,4)),
                 pose_norm=array_or_nan(obs.get('pose_norm') if obs else None,(33,4)),
+                vision_generation=np.asarray(obs.get('vision_generation',0) if obs else -1),
+                vision_reacquire_ms=np.asarray(obs.get('vision_reacquire_ms',0.) if obs else np.nan),
                 action=state.action.copy(),robot_qpos=data.qpos.copy(),robot_qvel=data.qvel.copy(),
                 robot_ctrl=data.ctrl.copy(),side_pose_valid=np.asarray(side_valid),side_hand_valid=np.asarray(side_hand),
                 pose_valid=np.asarray(any(side_valid)),hand_valid=np.asarray(any(side_hand)),
@@ -269,7 +273,9 @@ def run(args):
                        'PALM / PINCH: '+' | '.join(s[0].upper()+': '+('/'.join(result['module_state'][s][m] for m in ('palm','pinch')) if result else 'LOST') for s in SIDES),
                        'CALIB G pinch / O open: '+ ('COLLECTING '+str(result.get('calibration_collecting')) if result and result.get('calibration_collecting') else ' | '.join(s[0].upper()+': '+str(result['pinch_calibration'][s]['closed_trials'])+'/'+str(result['pinch_calibration'][s]['open_trials'])+' trials' if result else s+': 0/0' for s in SIDES)),
                        ('15s DEVELOPMENT EPISODE %.1fs' % ((now-episode_start)/1e9) if episode_active else 'T starts 15s episode; prompts are not ground truth'),
-                       'C body/wrist recalibrate | SPACE pause | M mirror | Q save/exit']
+                       'C mapping reset | R vision reacquire | SPACE resume/pause | Q exit']
+                vs=stream.vision_status()
+                lines.append('VISION REACQUIRING - WAIT' if vs['pending'] else 'VISION generation '+str(vs['generation']))
                 if result:
                     lines.extend(s.upper()+' CALIB '+calibration_status(result['pinch_calibration'][s]) for s in SIDES)
                 for i,line in enumerate(lines):
