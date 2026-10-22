@@ -262,7 +262,7 @@ class HumanTaskRobot:
             self._execute(command, clock, dt)
         except (RuntimeError, ValueError) as error:
             reason = str(error)
-            recoverable = command.stage in ('direct', 'pose2arm_reference') and reason.startswith((
+            recoverable = command.stage in ('direct', 'pose2arm_reference','gripper_reference') and reason.startswith((
                 'cartesian_target_unreachable:', 'task_motion_collision_rejected:', 'camera_target_missing'))
             self.warning = reason if recoverable else None
             self.error = None if recoverable else reason
@@ -273,6 +273,26 @@ class HumanTaskRobot:
             self.goal_q = self.goal_xyz = None
             # Hold the existing finger target on a failed command; do not drop payload.
             self.control.set_targets(self.joints, self.finger_targets)
+            if recoverable and command.stage=='direct':
+                # An unreachable arm target does not invalidate an independently
+                # observed pinch. Check fingers at the actual held arm pose.
+                try:self._execute_gripper_reference(command,clock,dt)
+                except (RuntimeError,ValueError) as grip_error:
+                    grip_reason=str(grip_error)
+                    if grip_reason.startswith(('task_motion_collision_rejected:','camera_target_missing')):
+                        self.warning=reason+'; gripper held: '+grip_reason
+                    else:self.error=grip_reason;self.warning=None
+
+    def _execute_gripper_reference(self,command,clock,dt):
+        if not np.isfinite(command.finger) or not 0<=command.finger<=.044:raise ValueError('invalid gripper aperture')
+        self._direct_payload(clock,opening=command.finger>.022)
+        if not self.attached and self.fresh_visual(clock) is None:raise RuntimeError('camera_target_missing_for_gripper_collision_check')
+        held=self.data.qpos[self.spec.qpos].copy()
+        finger=float(self.finger_targets[self.side]+np.clip(command.finger-self.finger_targets[self.side],-.132*dt,.132*dt))
+        self._check_segment(held,finger,'direct_grip')
+        self.joints[self.side]=held;self.finger_targets[self.side]=finger
+        self.control.set_targets(self.joints,self.finger_targets)
+        self.command_stage='gripper_reference';self.goal_q=self.goal_xyz=None
 
     def _check_reference_path(self, targets, fingers, allow_grasp=False):
         start={s:self.data.qpos[self.control.specs[s].qpos].copy() for s in self.reference_sides}
@@ -463,6 +483,9 @@ class HumanTaskRobot:
             return
         if stage == 'direct':
             self._execute_direct(command, clock, dt)
+            return
+        if stage == 'gripper_reference':
+            self._execute_gripper_reference(command,clock,dt)
             return
         if stage == 'plan':
             visual = self.fresh_visual(clock)

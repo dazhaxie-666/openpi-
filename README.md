@@ -6,6 +6,7 @@
 后续代码发布目标与数据排除范围见 [GitHub 发布说明](docs/github_publish_20261021.md)。
 最新默认实时路径包含躯干参考标定、完整相对掌面手腕、个人捏合标定与独立物理线程。
 操作、验证和未完成的独立验收见 [动作跟随 v2](openarm_cloth/docs/motion_v2_implementation_20261021_CN.md)。
+2026-10-22 接入手部置信度参数，修复手腕位置模式的连续捏合接线与手臂受阻时的夹爪独立更新；见 [手部分支集成](openarm_cloth/docs/direct_hand_branch_integration_20261022_CN.md)。
 新克隆不包含本机视频、模型权重和 outputs；示范回放需另行准备对应数据。
 
 ## 快速开始

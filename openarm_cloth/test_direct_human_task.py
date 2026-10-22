@@ -300,7 +300,8 @@ class DirectRobotTests(unittest.TestCase):
         robot.error = None
         robot.warning = None
         robot.goal_q = robot.goal_xyz = np.ones(1)
-        with patch.object(robot, '_execute', side_effect=[RuntimeError('cartesian_target_unreachable:test'), None]):
+        with patch.object(robot, '_execute', side_effect=[RuntimeError('cartesian_target_unreachable:test'), None]), \
+             patch.object(robot,'_execute_gripper_reference'):
             robot.execute(TaskCommand('direct', np.zeros(3), 0., 'human_direct'), 0.)
             self.assertIsNone(robot.error)
             self.assertIn('cartesian_target_unreachable', robot.warning)

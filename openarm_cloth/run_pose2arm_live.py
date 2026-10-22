@@ -144,7 +144,9 @@ def run(args):
     try:
         if not args.check:
             from mujoco import viewer as mjviewer
-            stream=BimanualHumanStream(args.camera,args.pose_model,(args.width,args.height))
+            stream=BimanualHumanStream(args.camera,args.pose_model,(args.width,args.height),
+                hand_confidence=getattr(args,'hand_confidence',.5),hand_presence_confidence=getattr(args,'hand_presence_confidence',None),
+                hand_tracking_confidence=getattr(args,'hand_tracking_confidence',None))
             worker=LatestPose2ArmWorker(**mapping_options)
             viewer=mjviewer.launch_passive(model,data,key_callback=key)
             viewer.cam.lookat[:]=[.15,0,.52];viewer.cam.distance=1.55;viewer.cam.azimuth=180;viewer.cam.elevation=-25

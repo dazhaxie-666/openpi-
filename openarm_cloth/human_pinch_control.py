@@ -36,7 +36,8 @@ class PinchCalibration:
 
     def add_trial(self,label,samples):
         if label not in self.trials:raise ValueError('unknown calibration label')
-        valid=[s for s in samples if s is not None and np.isfinite(s['r3'])]
+        valid=[s for s in samples if s is not None and np.isfinite(s['r3'])
+               and (s.get('r2') is None or np.isfinite(s['r2']))]
         if len(valid)<5:self.reason='TOO_FEW_VALID_CALIBRATION_SAMPLES';return False
         values=np.array([s['r3'] for s in valid])
         if np.ptp(np.percentile(values,[5,95]))>.3:
@@ -83,9 +84,12 @@ class HumanPinchControl:
         if self.last_stamp is not None and stamp<=self.last_stamp:
             self.reason='NON_MONOTONIC_SOURCE';return self.aperture
         dt=.05 if self.last_stamp is None else stamp-self.last_stamp;self.last_stamp=stamp;self.features=features
+        if (features is not None and (not np.isfinite(features.get('r3',np.nan)) or features['r3']<0
+            or (features.get('r2') is not None and not np.isfinite(features['r2'])))):
+            features=None
         if features is None or dt>.25:
             self.state='HOLD' if self.last_accepted is not None else 'LOST';self.reason='PINCH_MISSING' if features is None else 'SOURCE_GAP'
-            self.candidate=self.candidate_since=None;self.candidate_count=0;self.filter.stamp=None
+            self.candidate=self.candidate_since=None;self.candidate_count=0;self.filter.stamp=None;self.raw=None
             return self.aperture
         profile=self.calibration.profile or dict(r3=dict(closed=.15,open=1.2))
         openness={}
@@ -114,6 +118,63 @@ class HumanPinchControl:
         if self.mode=='binary':self.aperture=0. if self.closed else .044
         elif self.mode=='continuous':self.aperture=float(self.filter.update(wanted,stamp))*.044
         return self.aperture
+
+
+class TaskHandControl:
+    """Body-independent right-hand channel for Cartesian direct tasks.
+
+    Same pinch/calibration implementation as full-arm following; input clocks
+    and accepted hand identity stay explicit. No detector score substitutes
+    for a measured thumb/index ratio.
+    """
+    def __init__(self,mode='continuous',calibration_path=None,initial_aperture=.044):
+        from motion_observation import SourceClock
+        self.profiles=load_personal_calibration(calibration_path)
+        self.calibration=PinchCalibration(self.profiles.get('right'))
+        self.control=HumanPinchControl(mode,self.calibration)
+        self.control.aperture=float(initial_aperture);self.control.closed=initial_aperture<.022
+        self.clock=SourceClock();self.capture=None;self.seq=-1;self.stamp=None
+
+    def begin_pinch_calibration(self,label):
+        if label not in ('closed','open'):raise ValueError('unknown pinch label')
+        self.capture=dict(label=label,start=None,samples=[])
+
+    def export_calibration(self):
+        return dict(self.profiles,right=self.calibration.export())
+
+    def missing(self,reason='HAND_MISSING'):
+        c=self.control;c.state='HOLD' if c.last_accepted is not None else 'LOST';c.reason=reason
+        c.candidate=c.candidate_since=None;c.candidate_count=0;c.features=None;c.filter.stamp=None;c.raw=None
+        return self.snapshot()
+
+    def process(self,obs,now_s,source_clock=False,image_size=(1280,720)):
+        if obs is None:return self.missing()
+        if not source_clock and not 0<=now_s-obs['read_end']/1e9<=.35:return self.missing('STALE_HAND_SOURCE')
+        arm=obs.get('arms',{}).get('right',{})
+        features=pinch_features(arm.get('hand_raw'),arm.get('hand_norm'),image_size) if arm.get('hand_valid') else None
+        return self.process_features(obs['seq'],obs['read_end']/1e9,features)
+
+    def process_features(self,seq,stamp,features):
+        accepted,_,_=self.clock.accept(seq,stamp)
+        if not accepted:return self.snapshot()
+        self.seq,self.stamp=int(seq),float(stamp)
+        self.control.update(features,stamp)
+        if self.capture is not None:
+            if self.capture['start'] is None:self.capture['start']=stamp+.35
+            elapsed=stamp-self.capture['start']
+            if 0<=elapsed<=.75 and features is not None:self.capture['samples'].append(features)
+            if elapsed>.75:
+                self.calibration.add_trial(self.capture['label'],self.capture['samples']);self.capture=None
+        return self.snapshot()
+
+    def snapshot(self):
+        c=self.control;intent_valid=c.state=='TRACKING';valid=intent_valid and c.mode!='hold'
+        endpoints=(self.calibration.profile or dict(r3=dict(closed=.15,open=1.2)))['r3']
+        ratio=None if not intent_valid or c.features is None else .15+1.05*float(np.clip(
+            (c.features['r3']-endpoints['closed'])/(endpoints['open']-endpoints['closed']),0.,1.))
+        return dict(seq=self.seq,capture_s=self.stamp,aperture=c.aperture,valid=valid,intent_valid=intent_valid,state=c.state,reason=c.reason,
+                    features=c.features,intent_ratio=ratio,calibration=self.calibration.summary(),
+                    calibration_collecting=None if self.capture is None else self.capture['label'])
 
 
 def load_personal_calibration(path=None):

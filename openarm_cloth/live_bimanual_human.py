@@ -37,7 +37,8 @@ def run(args):
                               arms=list(SIDES),side_array_order=list(SIDES),aggregate_validity='any side',
                               identity='human anatomical left->robot left, right->right; display mirror only'),save_video=args.save_video)
     print(f'LIVE BIMANUAL | local video {args.save_video} | dataset {recorder.path}',flush=True)
-    stream=BimanualHumanStream(args.camera,args.pose_model,(args.width,args.height))
+    stream=BimanualHumanStream(args.camera,args.pose_model,(args.width,args.height),hand_confidence=args.hand_confidence,
+        hand_presence_confidence=args.hand_presence_confidence,hand_tracking_confidence=args.hand_tracking_confidence)
     flags=dict(paused=False,quit=False,reset=False,mode=args.wrist_mode)
     def key(code):
         if code==32: flags['paused']=not flags['paused']
@@ -165,6 +166,9 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--camera',type=int,default=0);p.add_argument('--pose-model',choices=('lite','full'),default='full')
     p.add_argument('--width',type=int,default=1280);p.add_argument('--height',type=int,default=720)
+    p.add_argument('--hand-confidence',type=float,default=.5)
+    p.add_argument('--hand-presence-confidence',type=float,default=None)
+    p.add_argument('--hand-tracking-confidence',type=float,default=None)
     p.add_argument('--wrist-mode',choices=('twist','full','off'),default='full',help='Full measured palm rotation (default); off keeps the original A arm-only wrist')
     p.add_argument('--torso-mode',choices=('auto','full_body','upper_body','original'),default='auto')
     p.add_argument('--gripper-mode',choices=('continuous','binary','hold'),default='continuous')

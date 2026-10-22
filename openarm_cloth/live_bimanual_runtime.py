@@ -145,7 +145,9 @@ def run_split(args):
     out=ROOT/'outputs'/'live_bimanual'/datetime.now().strftime('%Y%m%d_%H%M%S_%f');out.mkdir(parents=True,exist_ok=False)
     recorder=TestDatasetRecorder(out/'dataset',dict(settings=dict(vars(args)),runtime='separate physics worker and GUI MjData',
                               side_array_order=list(SIDES),arms=list(SIDES),aggregate_validity='any side',created_local=datetime.now().isoformat()),save_video=args.save_video)
-    stream=BimanualHumanStream(args.camera,args.pose_model,(args.width,args.height));loop=None;display_times=[];failure=None
+    stream=BimanualHumanStream(args.camera,args.pose_model,(args.width,args.height),hand_confidence=getattr(args,'hand_confidence',.5),
+        hand_presence_confidence=getattr(args,'hand_presence_confidence',None),hand_tracking_confidence=getattr(args,'hand_tracking_confidence',None))
+    loop=None;display_times=[];failure=None
     print(f'SPLIT BIMANUAL | dataset {recorder.path} | physics independent of GUI',flush=True)
     window='LIVE BOTH ARMS | local recording | C calibrate T wrist SPACE pause Q exit'
     flags=dict(quit=False)

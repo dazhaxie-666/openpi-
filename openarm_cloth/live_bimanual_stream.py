@@ -136,11 +136,20 @@ def full_inference(mp,detector,image,timestamp):
     return candidates
 
 
+def hand_landmarker_thresholds(confidence=.5,presence=None,tracking=None):
+    """Detection score, landmark presence and tracking IoU are distinct gates."""
+    values=dict(min_hand_detection_confidence=float(confidence),
+                min_hand_presence_confidence=float(confidence if presence is None else presence),
+                min_tracking_confidence=float(confidence if tracking is None else tracking))
+    if any(not np.isfinite(v) or not 0<v<=1 for v in values.values()):raise ValueError('hand confidences must be finite in (0, 1]')
+    return values
+
+
 class BimanualHumanStream:
-    def __init__(self,device=0,pose_model='full',resolution=(1280,720),camera_factory=None,hand_confidence=.5):
+    def __init__(self,device=0,pose_model='full',resolution=(1280,720),camera_factory=None,
+                 hand_confidence=.5,hand_presence_confidence=None,hand_tracking_confidence=None):
         self.latest=None;self.error=None;self.camera=None;self.closed=False;self.metadata={}
-        self.hand_confidence=float(hand_confidence)
-        if not 0<self.hand_confidence<=1:raise ValueError('hand_confidence must be in (0, 1]')
+        self.hand_thresholds=hand_landmarker_thresholds(hand_confidence,hand_presence_confidence,hand_tracking_confidence)
         self.lock=threading.Lock();self.device=device;self.pose_model=pose_model;self.resolution=resolution
         self.camera_factory=camera_factory;self.finished=False
         self.thread=threading.Thread(target=self._run,daemon=True);self.thread.start()
@@ -158,20 +167,13 @@ class BimanualHumanStream:
             with ExitStack() as stack:
                 pose=stack.enter_context(vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
                     base_options=options(f'pose_landmarker_{self.pose_model}.task'),running_mode=vision.RunningMode.VIDEO,num_poses=1)))
-                # MediaPipe's palm detector is less confident when the back of
-                # the hand faces the camera. Lower thresholds increase recall;
-                # geometry/consistency checks below still reject bad candidates.
-                hand_gate=dict(min_hand_detection_confidence=self.hand_confidence,
-                               min_hand_presence_confidence=self.hand_confidence,
-                               min_tracking_confidence=self.hand_confidence)
                 hands=stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2,**hand_gate)))
+                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2,**self.hand_thresholds)))
                 roi={s:stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**hand_gate))) for s in SIDES}
+                    base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**self.hand_thresholds))) for s in SIDES}
                 pool=stack.enter_context(ThreadPoolExecutor(max_workers=4))
                 self.camera=(self.camera_factory or USBLatestFrame)(self.device,*self.resolution,30)
-                self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),
-                                   hand_detection_confidence=self.hand_confidence,
+                self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),hand_thresholds=self.hand_thresholds,
                                    identity='anatomical left -> robot left, right -> right; preview mirror only',
                                    hand_search='square ROI + parallel full-frame; fresh body wrist + hand geometry + two-frame confirmation',
                                    observation_gate='body/hand wrist consistency; missing anchors never use handedness fallback',

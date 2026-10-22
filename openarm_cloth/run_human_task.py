@@ -22,6 +22,35 @@ from member_b_scene import ROOT, TARGET_ZONE, build_scene
 from handeye_grasp_red_cube import finger_joint_indices
 from task_workspace import TABLE_TOP, CONFIG
 from demo_grasp_viewer import place_cube_for_blind_test
+from human_pinch_control import TaskHandControl,save_personal_calibration,load_personal_calibration
+from live_bimanual_stream import hand_landmarker_thresholds
+
+
+def direct_hand_command(command,hand,stage,held_aperture,paused=False):
+    """Cartesian arm intent and accepted measured aperture are independent."""
+    if stage!='direct' or paused:
+        return TaskCommand('hold',finger=held_aperture) if paused or command.stage=='hold' else command
+    valid=hand is not None and hand['valid']
+    finger=hand['aperture'] if valid else held_aperture
+    if command.stage=='direct':
+        return TaskCommand('direct',command.target,finger,'human_wrist_and_pinch',reference_capture_s=hand.get('capture_s') if hand else None)
+    if command.stage=='hold' and valid:
+        return TaskCommand('gripper_reference',finger=finger,owner='human_pinch',reference_capture_s=hand['capture_s'])
+    return TaskCommand('hold',finger=held_aperture)
+
+
+def save_task_calibration(output,source,personal_path,synthetic=False):
+    """Optional calibration I/O must not interrupt robot/episode finalization."""
+    if source is None:return None
+    try:
+        profiles=source.export_calibration()
+        save_personal_calibration(output/'personal_calibration.json',profiles)
+        if not synthetic and any(p.get('profile') for p in profiles.values()):
+            previous=load_personal_calibration(personal_path);previous.update(profiles)
+            save_personal_calibration(personal_path,previous)
+    except Exception as error:
+        return f'{type(error).__name__}: {error}'
+    return None
 
 
 def pose2arm_reference_command(result, finger_targets):
@@ -192,8 +221,7 @@ def run(args):
         raise ValueError('--max-wait must be positive')
     if args.check_steps < 1:
         raise ValueError('--check-steps must be positive')
-    if not 0 < args.hand_confidence <= 1:
-        raise ValueError('--hand-confidence must be in (0, 1]')
+    hand_thresholds=hand_landmarker_thresholds(args.hand_confidence,args.hand_presence_confidence,args.hand_tracking_confidence)
     cv2.setNumThreads(1)
     direct = args.control == 'direct'
     use_a = direct and args.mapping == 'pose2arm'
@@ -211,8 +239,7 @@ def run(args):
     metadata = dict(schema='openarm_human_task_v1', source=source_kind, simulation_only=True,
                     human_validation_performed=False, training_performed=False,
                     synthetic_input=bool(args.scripted_check), side='right',
-                    human_side='right', robot_side='right', pose_model=args.pose_model, camera_device=args.camera,
-                    hand_confidence=args.hand_confidence,
+                    human_side='right', robot_side='right', pose_model=args.pose_model, camera_device=args.camera,hand_thresholds=hand_thresholds,
                     motion_mapping='pose2arm_original_online' if use_a else 'relative_wrist',
                     controlled_arms=list(active_sides), a_reference_order='left-first',
                     a_reference_execution='B dynamic actuator targets; no second Cartesian IK' if use_a else None,
@@ -242,9 +269,9 @@ def run(args):
     (output / 'manifest.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
     rows = []
     model = data = robot = evaluator = stream = source = None
-    a_mapper = a_worker = None
+    a_mapper = a_worker = hand_tracker = None
     video_writer = None
-    flags = dict(start=False, paused=False, quit=False, recenter=False, mirror=bool(args.mirror_preview))
+    flags = dict(start=False, paused=False, quit=False, recenter=False, mirror=bool(args.mirror_preview),calibrate=None)
     failure = None
     clock = cursor = 0.
     dt = .05
@@ -263,6 +290,8 @@ def run(args):
             flags['recenter'] = True
         elif code in (77, 109):
             flags['mirror'] = not flags['mirror']
+        elif direct and code in (71,103):flags['calibrate']='closed'
+        elif direct and code in (79,111):flags['calibrate']='open'
 
     def mouse(event, x, y, _flags, _param):
         if event == cv2.EVENT_LBUTTONUP and 12 <= x <= 235 and 488 <= y <= 530:
@@ -274,6 +303,8 @@ def run(args):
         place_cube_for_blind_test(model, data, args.cube_test_pose)
         robot = HumanTaskRobot(model, data, lift_m=config.lift_m)
         robot.initialize()
+        if direct and not use_a:
+            hand_tracker=TaskHandControl(args.gripper_mode,args.calibration,robot.finger_targets['right'])
         if use_a:
             from a_reference_adapter import verify_kinematics
             from pose2arm_task_mapping import Pose2ArmTaskMapping, LatestPose2ArmWorker, observed_sides
@@ -295,8 +326,8 @@ def run(args):
                         gain=config.gain, deadband_m=config.deadband_m,
                         max_target_lead_m=config.max_target_lead_m, image_size=[320, 240],
                         close_ratio=config.close_ratio, open_ratio=config.open_ratio,
-                        gripper_mapping='continuous normalized pinch -> 0..0.044 m' if use_a else 'gesture hysteresis',
-                        gesture_threshold_role='start/intent only; never overrides continuous A aperture' if use_a else 'aperture switching')
+                        gripper_mapping=args.gripper_mode+' calibrated pinch -> 0..0.044 m' if direct else 'gesture hysteresis',
+                        gesture_threshold_role='start/intent only; accepted aperture has independent hand state' if direct else 'aperture switching')
         evaluator = TaskEvaluator(model, data, config)
         if args.video:
             path = args.video.resolve()
@@ -306,8 +337,8 @@ def run(args):
                 metadata.update(source_video=str(path), source_sha256=hashlib.file_digest(video_file, 'sha256').hexdigest())
         elif not args.scripted_check:
             from live_bimanual_stream import BimanualHumanStream
-            stream = BimanualHumanStream(args.camera, args.pose_model, (1280, 720),
-                                         hand_confidence=args.hand_confidence)
+            stream = BimanualHumanStream(args.camera,args.pose_model,(1280,720),hand_confidence=args.hand_confidence,
+                hand_presence_confidence=args.hand_presence_confidence,hand_tracking_confidence=args.hand_tracking_confidence)
         metadata.update(nq=model.nq, nv=model.nv, nu=model.nu, timestep_s=float(model.opt.timestep),
                         robot_joint_names=[model.joint(i).name for i in range(model.njnt)],
                         robot_qpos_index={s: spec.qpos.tolist() for s, spec in robot.control.specs.items()},
@@ -375,6 +406,18 @@ def run(args):
                     human = human_input(obs, time.perf_counter(), source_clock=source is not None, position_only=direct)
                     if stream is not None and stream.error:
                         raise RuntimeError('camera_or_recognition_failed: ' + stream.error)
+                if flags['calibrate']:
+                    channel=a_worker or a_mapper or hand_tracker
+                    if channel is not None:channel.begin_pinch_calibration(flags['calibrate'])
+                    flags['calibrate']=None
+                hand_result=None
+                if hand_tracker is not None:
+                    if args.scripted_check:
+                        hand_result=hand_tracker.process_features(human.seq,human.capture_s,dict(r3=human.pinch_ratio,r2=None))
+                    else:
+                        hand_result=hand_tracker.process(obs,time.perf_counter(),source_clock=source is not None,
+                            image_size=source.blob['image_size'] if source is not None else (1280,720))
+                    human.pinch_ratio=hand_result['intent_ratio']
                 command = task.update(human, feedback, clock,
                                       start=flags['start'] or args.check or source is not None,
                                       paused=flags['paused'], recenter=flags['recenter'])
@@ -405,6 +448,8 @@ def run(args):
                         task.message=' | '.join(s.upper()+': '+a_result['status'][s] for s in active_sides)
                     elif not flags['paused']:
                         task.message='A mapping waiting for fresh body observations (no queued old motions)'
+                if hand_tracker is not None:
+                    command=direct_hand_command(command,hand_result,task.stage,robot.finger_targets['right'],flags['paused'])
                 tracking_status, observation_age, wrist_visibility = tracking_diagnostic(
                     obs, human, time.perf_counter(), source_clock=source is not None)
                 if args.scripted_check:
@@ -434,6 +479,11 @@ def run(args):
                            start_requested=np.asarray(task.start_requested), readiness_message=np.asarray(task.message),
                            preview_mirrored=np.asarray(flags['mirror']),
                            motion_warning=np.asarray(robot.warning or ''),
+                           pinch_state=np.asarray(hand_result['state'] if hand_result else (a_result.get('module_state',{}).get('right',{}).get('pinch','LOST') if a_result else 'LOST')),
+                           pinch_reason=np.asarray(hand_result['reason'] if hand_result else (a_result.get('module_reason',{}).get('right',{}).get('pinch','') if a_result else '')),
+                           pinch_reference_m=np.asarray(hand_result['aperture'] if hand_result else (a_result.get('fingers',{}).get('right',np.nan) if a_result else np.nan)),
+                           pinch_reference_valid=np.asarray(bool(hand_result['valid']) if hand_result else bool(a_result and a_result.get('finger_valid',{}).get('right'))),
+                           pinch_features=np.asarray([(hand_result.get('features') or {}).get(k,np.nan) if hand_result else np.nan for k in ('r3','r2')],dtype=float),
                            direct_ik_mode=np.asarray(robot.direct_ik_mode),
                            a_reference_joint=np.concatenate([a_result['joints'].get(s,np.full(7,np.nan)) if a_result else np.full(7,np.nan) for s in ('left','right')]),
                            a_reference_valid=np.asarray([bool(a_result and s in a_result['joints']) for s in ('left','right')]),
@@ -510,6 +560,14 @@ def run(args):
                              ('Task scored PASS; control stays active. Q saves.' if direct and scored else
                               'Time reminder; continue practice or Q to save.' if direct and timeout > 0 and elapsed > timeout else
                               'SPACE/click START | C recenter | M mirror | Q save/exit')]
+                    if direct:
+                        pinch_state=hand_result['state'] if hand_result else (a_result.get('module_state',{}).get('right',{}).get('pinch','LOST') if a_result else 'LOST')
+                        pinch_reason=hand_result['reason'] if hand_result else (a_result.get('module_reason',{}).get('right',{}).get('pinch','') if a_result else '')
+                        calibration=hand_result['calibration'] if hand_result else (a_result.get('pinch_calibration',{}).get('right',{}) if a_result else {})
+                        actual=float(np.mean(data.qpos[finger_joint_indices(model,'right')[0]]))
+                        lines.extend([f'PINCH {pinch_state}: {pinch_reason}',
+                            f'APERTURE target {robot.finger_targets["right"]/.044:.0%} / actual {actual/.044:.0%}',
+                            f'G closed / O open trials: {calibration.get("closed_trials",0)}/{calibration.get("open_trials",0)}; keep each pose 1.2s'])
                     for j, line in enumerate(lines):
                         cv2.putText(frame, line, (12, 28 + 30 * j), cv2.FONT_HERSHEY_SIMPLEX, .55, (0, 0, 0), 3)
                         cv2.putText(frame, line, (12, 28 + 30 * j), cv2.FONT_HERSHEY_SIMPLEX, .55, (255, 255, 255), 1)
@@ -544,6 +602,10 @@ def run(args):
             stream.close()
         if a_worker is not None:
             a_worker.close()
+        calibration_source=hand_tracker or a_mapper or (a_worker.mapping if a_worker is not None else None)
+        calibration_error=save_task_calibration(output,calibration_source,args.calibration,synthetic=args.check)
+        metadata['calibration_error']=calibration_error
+        if calibration_error:print('Calibration save failed; preserving episode: '+calibration_error,flush=True)
         if robot is not None:
             robot.close()
         if video_writer is not None:
@@ -557,7 +619,7 @@ def run(args):
         verdict = ('PASS' if success else 'FAIL' if task.stage == 'failed' else 'INCOMPLETE') if direct else (
             'PASS' if success else 'CANCELLED' if task.stage == 'cancelled' else 'FAIL')
         report = dict(verdict=verdict, control_mode=args.control,
-                      controller_stage=task.stage, reason=task.reason, error=failure,
+                      controller_stage=task.stage, reason=task.reason, error=failure,calibration_error=calibration_error,
                       input_source=source_kind, synthetic_input=bool(args.scripted_check),
                       human_validation_performed=bool(not args.scripted_check and any(bool(r['human_valid']) for r in rows)),
                       human_task_success=bool(success and not args.scripted_check),
@@ -602,8 +664,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--camera', type=int, default=0)
     parser.add_argument('--pose-model', choices=('lite', 'full', 'heavy'), default='full')
-    parser.add_argument('--hand-confidence', type=float, default=.5,
-                        help='MediaPipe hand detection/presence/tracking confidence; lower (e.g. .35) for back-of-hand recall')
+    parser.add_argument('--hand-confidence',type=float,default=.5,help='Hand detection threshold; also supplies unset presence/tracking thresholds')
+    parser.add_argument('--hand-presence-confidence',type=float,default=None,help='Independent landmark presence threshold')
+    parser.add_argument('--hand-tracking-confidence',type=float,default=None,help='Independent tracking IoU threshold')
     parser.add_argument('--torso-mode',choices=('auto','full_body','upper_body','original'),default='auto')
     parser.add_argument('--wrist-mode',choices=('full','twist','off'),default='full')
     parser.add_argument('--gripper-mode',choices=('continuous','binary','hold'),default='continuous')
