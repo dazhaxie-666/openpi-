@@ -405,14 +405,14 @@ class DirectHumanTask(HumanGraspTask):
         else:
             self.gesture = self.candidate = self.candidate_since = None
         if self.stage == 'ready':
-            if self.start_requested and self.gesture == 'open':
+            if self.start_requested:
                 self.started = clock
                 self.start_requested = False
                 self.rebase(human, feedback)
                 self.was_missing = False
                 self._enter('direct', clock, 'human_direct_start')
             else:
-                self.message = 'Open thumb/index, press SPACE or click START; keep right hand visible'
+                self.message = 'Press SPACE or click START; wrist required, fingers optional'
             return hold
         if self.was_missing or recenter:
             self.rebase(human, feedback)

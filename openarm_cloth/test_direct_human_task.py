@@ -97,6 +97,23 @@ class DirectTaskTests(unittest.TestCase):
         self.assertEqual(self.task.stage, 'direct')
         self.assertEqual(self.tick().stage, 'hold')
 
+    def test_explicit_start_with_visible_wrist_does_not_require_fingers(self):
+        command=self.tick(ratio=None,start=True)
+        self.assertEqual(self.task.stage,'direct')
+        self.assertEqual(command.stage,'hold')
+        self.point[0]+=.02
+        self.assertEqual(self.tick(ratio=None).stage,'direct')
+
+    def test_start_request_waits_for_wrist_but_not_open_gesture(self):
+        self.tick(ratio=None,valid=False,start=True)
+        self.assertEqual(self.task.stage,'ready')
+        self.tick(ratio=None)
+        self.assertEqual(self.task.stage,'direct')
+
+    def test_visible_wrist_without_start_stays_ready(self):
+        self.tick(ratio=None)
+        self.assertEqual(self.task.stage,'ready')
+
     def test_pinch_anywhere_closes_without_plan_or_automatic_lift(self):
         self.start()
         command = self.stable(.1, count=70)

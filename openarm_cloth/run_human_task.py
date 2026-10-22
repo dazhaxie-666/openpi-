@@ -24,6 +24,7 @@ from task_workspace import TABLE_TOP, CONFIG
 from demo_grasp_viewer import place_cube_for_blind_test
 from human_pinch_control import TaskHandControl,save_personal_calibration,load_personal_calibration,calibration_status
 from live_bimanual_stream import hand_landmarker_thresholds,apply_vision_reacquire
+from human_task_preview import compose_task_preview
 
 
 def direct_hand_command(command,hand,stage,held_aperture,paused=False):
@@ -379,7 +380,7 @@ def run(args):
                 viewer.cam.lookat[:] = [.43, 0, .46]
                 viewer.cam.distance, viewer.cam.azimuth, viewer.cam.elevation = 1.2, 150, -30
                 cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-                cv2.resizeWindow(window, 960, 540)
+                cv2.resizeWindow(window, 1440, 720)
                 cv2.setMouseCallback(window, mouse)
                 if source is not None:
                     from source_video_reader import SourceVideoReader
@@ -396,7 +397,9 @@ def run(args):
             print('POSE2ARM ORIGINAL: 10 fresh frames calibrate each arm; original A joints drive B. C recalibrates.'
                   if use_a else 'DIRECT: wrist moves arm; PINCH closes, OPEN releases anywhere. Retry freely; Q saves and ends.'
                   if direct else 'ASSISTED: move to cube, PINCH and HOLD; after lift move over GREEN goal, then OPEN.', flush=True)
-            print('Open hand for 0.2 s, SPACE or click START. C recenter; R pauses and restarts vision; SPACE resumes; M mirror; Q exit.', flush=True)
+            print(('SPACE or click START: a visible wrist starts direct control; fingers are optional.' if direct else
+                   'Open hand for 0.2 s, then SPACE or click START.')+
+                  ' C recenter; R pauses and restarts vision; SPACE resumes; M mirror; Q exit.', flush=True)
             index = 0
             expected_sim_time = float(data.time)
             while not flags['quit'] and task.stage not in task.terminal:
@@ -607,9 +610,7 @@ def run(args):
                             f'APERTURE target {robot.finger_targets["right"]/.044:.0%} / actual {actual/.044:.0%}',
                             f'G closed / O open trials: {calibration.get("closed_trials",0)}/{calibration.get("open_trials",0)}; keep each pose 1.2s',
                             'CALIBRATION '+calibration_status(calibration)])
-                    for j, line in enumerate(lines):
-                        cv2.putText(frame, line, (12, 28 + 30 * j), cv2.FONT_HERSHEY_SIMPLEX, .55, (0, 0, 0), 3)
-                        cv2.putText(frame, line, (12, 28 + 30 * j), cv2.FONT_HERSHEY_SIMPLEX, .55, (255, 255, 255), 1)
+                    frame=compose_task_preview(frame,lines,task.stage,flags['paused'],task.start_requested,direct=direct)
                     button = 'START' if task.stage == 'ready' else 'RESUME' if flags['paused'] else 'PAUSE'
                     cv2.rectangle(frame, (12, 488), (235, 530), (45, 160, 45), -1)
                     cv2.putText(frame, button, (28, 518), cv2.FONT_HERSHEY_SIMPLEX, .8, (255, 255, 255), 2)
