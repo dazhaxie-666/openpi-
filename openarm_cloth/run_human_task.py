@@ -22,7 +22,7 @@ from member_b_scene import ROOT, TARGET_ZONE, build_scene
 from handeye_grasp_red_cube import finger_joint_indices
 from task_workspace import TABLE_TOP, CONFIG
 from demo_grasp_viewer import place_cube_for_blind_test
-from human_pinch_control import TaskHandControl,save_personal_calibration,load_personal_calibration
+from human_pinch_control import TaskHandControl,save_personal_calibration,load_personal_calibration,calibration_status
 from live_bimanual_stream import hand_landmarker_thresholds
 
 
@@ -72,6 +72,7 @@ def human_input(obs, now_s, source_clock=False, position_only=False):
     # This task translates a constant-attitude gripper. It needs a reliable
     # torso-relative wrist, not a visible palm or an anatomical arm rotation.
     point = arm.get('position_point', arm['point']) if position_only else arm['point']
+    if position_only and not obs.get('position_trusted',{}).get('right',True):point=None
     valid = (point is not None and np.asarray(point).shape == (3,)
              and np.isfinite(point).all() and (source_clock or 0 <= age <= .35))
     return HumanInput(int(obs['seq']), point, ratio, bool(valid), obs['read_end'] / 1e9)
@@ -84,7 +85,11 @@ def tracking_diagnostic(obs, human, now_s, source_clock=False):
     if pose is None and obs is not None:
         pose = obs.get('pose_raw')
     pose = None if pose is None else np.asarray(pose)
-    wrist = float(pose[16, 3]) if pose is not None and pose.shape == (33, 4) else np.nan
+    norm=None if obs is None else obs.get('pose_norm')
+    norm=None if norm is None else np.asarray(norm)
+    image_pose=norm if norm is not None and norm.shape==(33,4) else pose
+    threshold=.6 if obs is not None and 'position_trusted' in obs else .45
+    wrist = float(image_pose[16, 3]) if image_pose is not None and image_pose.shape == (33, 4) else np.nan
     if obs is None:
         reason = 'WAITING_FOR_CAMERA'
     elif not source_clock and not 0 <= age <= .35:
@@ -93,10 +98,16 @@ def tracking_diagnostic(obs, human, now_s, source_clock=False):
         reason = 'WRIST_OK'
     elif pose is None or pose.shape != (33, 4) or not np.isfinite(pose[[11,12,16,23,24]]).all():
         reason = 'BODY_NOT_DETECTED'
-    elif np.min(pose[[11,12],3]) < .45:
+    elif norm is not None and norm.shape==(33,4) and np.any((norm[16,:2]<0)|(norm[16,:2]>1)):
+        reason = 'WRIST_OUT_OF_FRAME'
+    elif norm is not None and norm.shape==(33,4) and np.any((norm[[11,12],:2]<0)|(norm[[11,12],:2]>1)):
+        reason = 'SHOULDERS_OUT_OF_FRAME'
+    elif np.min(image_pose[[11,12],3]) < threshold:
         reason = 'SHOULDERS_LOW_CONFIDENCE'
-    elif wrist < .45:
+    elif wrist < threshold:
         reason = 'WRIST_LOW_CONFIDENCE'
+    elif obs.get('position_quality',{}).get('right')=='body/hand wrist disagreement':
+        reason = 'BODY_HAND_WRIST_DISAGREEMENT'
     else:
         reason = 'BODY_FRAME_UNAVAILABLE'
     return reason, age, wrist
@@ -240,6 +251,7 @@ def run(args):
                     human_validation_performed=False, training_performed=False,
                     synthetic_input=bool(args.scripted_check), side='right',
                     human_side='right', robot_side='right', pose_model=args.pose_model, camera_device=args.camera,hand_thresholds=hand_thresholds,
+                    personal_calibration_path=str(args.calibration.resolve()),
                     motion_mapping='pose2arm_original_online' if use_a else 'relative_wrist',
                     controlled_arms=list(active_sides), a_reference_order='left-first',
                     a_reference_execution='B dynamic actuator targets; no second Cartesian IK' if use_a else None,
@@ -455,7 +467,8 @@ def run(args):
                 if args.scripted_check:
                     tracking_status = 'SYNTHETIC_INPUT'
                 elif direct and not use_a and not human.valid and not flags['paused']:
-                    task.message = tracking_status + (f' ({wrist_visibility:.2f} / need 0.45)' if tracking_status == 'WRIST_LOW_CONFIDENCE' else '')
+                    needed=.6 if obs is not None and 'position_trusted' in obs else .45
+                    task.message = tracking_status + (f' ({wrist_visibility:.2f} / need {needed:.2f})' if tracking_status == 'WRIST_LOW_CONFIDENCE' else '')
                 flags['start'] = flags['recenter'] = False
                 robot.execute(command, clock, dt)
                 if direct and robot.warning:
@@ -499,6 +512,10 @@ def run(args):
                            a_blocked_sides=np.asarray([s in robot.reference_blocked_sides for s in ('left','right')]),
                            control_work_ms=np.asarray(np.nan),
                            tracking_status=np.asarray(tracking_status),
+                           position_observation_reason=np.asarray(obs.get('position_quality',{}).get('right','') if obs else 'NO_OBSERVATION'),
+                           arm_observation_reason=np.asarray(obs.get('pose_quality',{}).get('right','') if obs else 'NO_OBSERVATION'),
+                           human_pose_norm=np.asarray(obs['pose_norm']).copy() if obs is not None and obs.get('pose_norm') is not None else np.full((33,4),np.nan),
+                           pinch_calibration_state=np.asarray(calibration_status(hand_result['calibration']) if hand_result else calibration_status(a_result.get('pinch_calibration',{}).get('right',{})) if a_result else 'NOT READY'),
                            observation_age_s=np.asarray(observation_age),
                            right_wrist_visibility=np.asarray(wrist_visibility),
                            command_stage=np.asarray(command.stage), control_owner=np.asarray(command.owner),
@@ -567,7 +584,8 @@ def run(args):
                         actual=float(np.mean(data.qpos[finger_joint_indices(model,'right')[0]]))
                         lines.extend([f'PINCH {pinch_state}: {pinch_reason}',
                             f'APERTURE target {robot.finger_targets["right"]/.044:.0%} / actual {actual/.044:.0%}',
-                            f'G closed / O open trials: {calibration.get("closed_trials",0)}/{calibration.get("open_trials",0)}; keep each pose 1.2s'])
+                            f'G closed / O open trials: {calibration.get("closed_trials",0)}/{calibration.get("open_trials",0)}; keep each pose 1.2s',
+                            'CALIBRATION '+calibration_status(calibration)])
                     for j, line in enumerate(lines):
                         cv2.putText(frame, line, (12, 28 + 30 * j), cv2.FONT_HERSHEY_SIMPLEX, .55, (0, 0, 0), 3)
                         cv2.putText(frame, line, (12, 28 + 30 * j), cv2.FONT_HERSHEY_SIMPLEX, .55, (255, 255, 255), 1)

@@ -230,10 +230,11 @@ class BimanualHumanStream:
                     image_size=(bgr.shape[1],bgr.shape[0])
                     candidates=[c for c in candidates if credible_hand(c,image_size)]
                     pose_trusted,pose_quality=body_hand_consistency(norm,candidates,image_size)
+                    position_trusted,position_quality=body_hand_consistency(norm,candidates,image_size,require_elbow=False)
                     association_pose=None if norm is None else norm.copy()
                     if association_pose is not None:
                         for j,s in enumerate(SIDES):
-                            if not pose_trusted[s]:association_pose[15+j,3]=0.
+                            if not position_trusted[s]:association_pose[15+j,3]=0.
                     # Do not aim the next hand crop at a body wrist that has
                     # just failed consistency checks. Full-frame recovery runs
                     # independently and can reacquire a real visible hand.
@@ -264,7 +265,7 @@ class BimanualHumanStream:
                         if arm is not None: normals[s]=arm['normal']
                         arms[s]=dict(pose=arm,point=human_wrist(world,s) if pose_trusted[s] else None,hand_valid=candidate is not None,
                                      hand_quality='confirmed' if candidate is not None else ('awaiting second observation' if s in associated else 'no hand at trusted body wrist'),
-                                     position_point=human_wrist(world,s,require_elbow=False) if pose_trusted[s] else None,
+                                     position_point=human_wrist(world,s,require_elbow=False) if position_trusted[s] else None,
                                      hand_raw=hraw,hand_filtered=hfiltered,hand_norm=hnorm,fist=fist,distance=distance,
                                      roi_used=candidate is not None and candidate['roi'] is not None)
                     annotated=bgr.copy()
@@ -282,6 +283,7 @@ class BimanualHumanStream:
                                 done=time.perf_counter_ns(),arms=arms,raw_image=bgr,image=annotated,
                                 pose_raw=raw,pose_filtered=world,pose_norm=norm,
                                 pose_trusted=pose_trusted,pose_quality=pose_quality,
+                                position_trusted=position_trusted,position_quality=position_quality,
                                 source_dt=source_dt,source_reason=source_reason,
                                 captured_sequence=sequence,processed_sources=processed,skipped_capture_sources=skipped,nonmonotonic_sources=source_clock.rejected,
                                 pose_ms=(pose_done-start)/1e6,hand_ms=(hand_done-start)/1e6,

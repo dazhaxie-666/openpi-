@@ -19,7 +19,7 @@ from run_a_reference_on_b import MotionFeedforwardController
 from live_reference_conditioning import JointReferenceTrajectory
 from live_observation_quality import b_joint_reference
 from live_motion_runtime import LivePhysicsWorker,capture_control
-from human_pinch_control import DEFAULT_CALIBRATION,save_personal_calibration
+from human_pinch_control import DEFAULT_CALIBRATION,save_personal_calibration,calibration_status
 
 SIDES=('left','right')
 
@@ -270,6 +270,8 @@ def run(args):
                        'CALIB G pinch / O open: '+ ('COLLECTING '+str(result.get('calibration_collecting')) if result and result.get('calibration_collecting') else ' | '.join(s[0].upper()+': '+str(result['pinch_calibration'][s]['closed_trials'])+'/'+str(result['pinch_calibration'][s]['open_trials'])+' trials' if result else s+': 0/0' for s in SIDES)),
                        ('15s DEVELOPMENT EPISODE %.1fs' % ((now-episode_start)/1e9) if episode_active else 'T starts 15s episode; prompts are not ground truth'),
                        'C body/wrist recalibrate | SPACE pause | M mirror | Q save/exit']
+                if result:
+                    lines.extend(s.upper()+' CALIB '+calibration_status(result['pinch_calibration'][s]) for s in SIDES)
                 for i,line in enumerate(lines):
                     cv2.putText(frame,line,(12,28+30*i),cv2.FONT_HERSHEY_SIMPLEX,.55,(0,0,0),3)
                     cv2.putText(frame,line,(12,28+30*i),cv2.FONT_HERSHEY_SIMPLEX,.55,(240,240,240),1)

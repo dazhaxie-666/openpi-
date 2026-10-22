@@ -31,7 +31,7 @@ def credible_hand(candidate,image_size=(1280,720)):
                 and .015<=metric_width<=.18 and span<=.65*wh[1])
 
 
-def body_hand_consistency(pose,candidates,image_size=(1280,720)):
+def body_hand_consistency(pose,candidates,image_size=(1280,720),require_elbow=True):
     trusted={s:False for s in SIDES};reasons={s:'body missing' for s in SIDES}
     if pose is None or np.shape(pose)!=(33,4):return trusted,reasons
     wh=np.asarray(image_size,dtype=float)
@@ -39,9 +39,11 @@ def body_hand_consistency(pose,candidates,image_size=(1280,720)):
     for c in candidates:
         if credible_hand(c,image_size) and not any(np.linalg.norm((c['wrist']-d['wrist'])*wh)<25.*wh[1]/720. for d in unique):unique.append(c)
     for j,s in enumerate(SIDES):
-        ids=[11,12,13+j,15+j]
+        ids=[11,12,15+j]+([13+j] if require_elbow else [])
         if not np.isfinite(pose[ids]).all() or np.min(pose[ids,3])<.6:
-            reasons[s]='shoulder/elbow/wrist confidence low';continue
+            reasons[s]='shoulder/elbow/wrist confidence low' if require_elbow else 'shoulder/wrist confidence low';continue
+        if np.any(pose[[11,12],:2]<0) or np.any(pose[[11,12],:2]>1):
+            reasons[s]='body shoulders outside frame';continue
         if np.any(pose[15+j,:2]<0) or np.any(pose[15+j,:2]>1):
             reasons[s]='body wrist outside frame';continue
         # Two separately located credible hands provide an independent check

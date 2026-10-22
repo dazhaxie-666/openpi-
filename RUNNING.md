@@ -29,6 +29,7 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 ## 实时双臂跟随
 
 2026-10-22 的手部参数、连续夹爪与独立更新修复见 [手部分支集成说明](openarm_cloth/docs/direct_hand_branch_integration_20261022_CN.md)。
+坐站切换、肘部遮挡与“10/10 不等于标定通过”的修复见 [站姿观测与标定反馈](openarm_cloth/docs/standing_observation_fix_20261022_CN.md)。
 
 ```powershell
 & .\run.ps1 -Mode live
@@ -72,6 +73,8 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 B 保留桌面/物块接触检查，受阻侧限步或保持，另一侧及夹爪独立处理；评分仍只看右臂任务。
 `--arms right` 仅控制右臂；`--mapping wrist` 保留此前小工作区手腕位置控制。
 桌面末端位置操作可用 `--mapping wrist --gripper-mode continuous`，现在也使用个人捏合端点与连续开度；G 合拢/O 张开各至少 10 次，每次保持 1.2 秒。
+试次数达标后还须看到 `CALIBRATION READY`；`NOT READY` 应按原因处理。若提示 `LABELS REVERSED`，换新个人文件重新采样，G=指尖接触，O=两指分开。
+坐站切换时先确保站立后的头、双肩、手腕和手指仍完整入镜，恢复 `WRIST_OK` 后按 C 重定中心；C 不能恢复出画的关键点。
 手背检出不足可对照 `--hand-confidence 0.35`；检测/存在性/跟踪可独立设置，默认仍 .5，降低门限不代表提高准确率。
 完整选项、夹爪保持原因与验证边界见 [手部分支集成说明](openarm_cloth/docs/direct_hand_branch_integration_20261022_CN.md)。
 要做双臂动作跟随用 `live`，该模式使用独立的无桌面/方块场景，不做抓取任务。

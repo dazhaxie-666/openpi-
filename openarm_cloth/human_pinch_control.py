@@ -56,6 +56,8 @@ class PinchCalibration:
                 if field=='r3':self.reason='INSUFFICIENT_3D_CALIBRATION';return False
                 continue
             a=float(np.percentile(groups['closed'],95));b=float(np.percentile(groups['open'],5))
+            if field=='r3' and np.percentile(groups['closed'],5)>np.percentile(groups['open'],95):
+                self.reason='OPEN_CLOSED_LABELS_REVERSED';return False
             noise=max(float(np.std([np.median([v[field] for v in trial if v.get(field) is not None]) for trial in self.trials[label] if any(v.get(field) is not None for v in trial)])) for label in self.trials)
             if b-a<=max(.05,6*noise):
                 if field=='r3':self.reason='OPEN_CLOSED_DISTRIBUTIONS_OVERLAP';return False
@@ -189,3 +191,11 @@ def save_personal_calibration(path,sides):
     target=Path(path);target.parent.mkdir(parents=True,exist_ok=True)
     payload=dict(version=1,scope='personal development calibration; no 99% accuracy claim',sides=sides)
     target.write_text(json.dumps(payload,indent=2),encoding='utf-8')
+
+
+def calibration_status(summary):
+    """Trial counts alone never mean a fitted personal mapping exists."""
+    if summary.get('calibrated'):return 'READY - personal endpoints active'
+    reason=summary.get('reason') or 'NO_PERSONAL_PROFILE'
+    if reason=='OPEN_CLOSED_LABELS_REVERSED':return 'NOT READY: LABELS REVERSED - G=PINCH, O=SPREAD'
+    return 'NOT READY: '+reason
