@@ -14,14 +14,15 @@ import numpy as np
 
 
 class TestDatasetRecorder:
-    def __init__(self,path,metadata,save_video=True,chunk_rows=40):
+    def __init__(self,path,metadata,save_video=True,chunk_rows=40,queue_size=128):
         self.path=Path(path);self.path.mkdir(parents=True,exist_ok=False)
         self.metadata=dict(metadata,schema='openarm_live_test_v1',save_video=save_video,
                            video_scope='consumed new USB observations; not guaranteed complete 30 Hz capture',
                            world_units='monocular model estimated metres, not calibrated physical measurement',
                            privacy='local only; human video and landmarks; no upload',task_success='not assessed')
         self.save_video=save_video;self.chunk_rows=chunk_rows
-        self.queue=queue.Queue(maxsize=128);self.dropped_rows=0;self.saved_rows=0
+        if queue_size<1:raise ValueError('queue_size must be positive')
+        self.queue=queue.Queue(maxsize=queue_size);self.dropped_rows=0;self.saved_rows=0
         self.video_frames=0;self.chunks=0;self.error=None;self.closed=False;self.finished=False
         self.metadata_lock=threading.Lock()
         self._write_manifest()

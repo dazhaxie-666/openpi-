@@ -174,9 +174,16 @@ class HumanGraspTask:
 
     def _follow(self, human, dt, actual_tcp):
         goal = self.robot_anchor + self.config.gain * (human.point - self.human_anchor)
+        tracing=getattr(self,'record_motion_trace',False)
+        unclipped=goal.copy() if tracing else None
         goal = np.clip(goal, self.config.lower, self.config.upper)
+        workspace_goal=goal.copy() if tracing else None
         lead = goal - actual_tcp
         goal = actual_tcp + lead * min(1., self.config.max_target_lead_m / max(np.linalg.norm(lead), 1e-12))
+        if tracing:
+            self.motion_trace=dict(human_anchor=self.human_anchor.copy(),robot_anchor=self.robot_anchor.copy(),
+                unclipped_goal=unclipped,workspace_goal=workspace_goal,
+                workspace_clipped=np.abs(unclipped-workspace_goal)>1e-9,lead_goal=goal.copy())
         delta = goal - self.target
         if np.linalg.norm(delta) > self.config.deadband_m:
             self.target += delta * min(1., self.config.speed * dt / max(np.linalg.norm(delta), 1e-12))

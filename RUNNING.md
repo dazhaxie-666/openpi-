@@ -70,6 +70,7 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 
 当前默认 `--mapping pose2arm --arms both`。先用 10 个有效观测标定各臂，右手张开后空格开始。
 直接遥操模式按空格/START 且手腕有效即可进入 DIRECT，手指缺失不再阻塞启动，夹爪保持原开度。辅助抓取模式仍要求识别到手势。状态改为摄像头右侧深色面板，底部大字提示 READY、START REQUESTED、PAUSED 或 DIRECT。
+定位卡顿、前后轴和手背捏合可加 `--diagnostic-recording`：后台保存本地人体录像，关闭逐帧PNG写盘，按屏幕提示分轴/手掌手背操作，START后65秒自动保存。完整命令与输出字段见 [引导式诊断录制](openarm_cloth/docs/guided_diagnostic_recording_20261022_CN.md)。
 左手→左臂、右手→右臂，捏合闭爪/张手松爪，下降/抬升/搬运由人操作，不自动接管抓取。
 B 保留桌面/物块接触检查，受阻侧限步或保持，另一侧及夹爪独立处理；评分仍只看右臂任务。
 `--arms right` 仅控制右臂；`--mapping wrist` 保留此前小工作区手腕位置控制。
