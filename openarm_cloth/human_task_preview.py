@@ -29,7 +29,7 @@ def poll_task_preview(window,key):
     return cv2.getWindowProperty(window,cv2.WND_PROP_VISIBLE)>=1
 
 
-def compose_task_preview(camera,lines,stage,paused=False,start_requested=False,direct=True,prompt=None,calibration_warning=None):
+def compose_task_preview(camera,lines,stage,paused=False,start_requested=False,direct=True,prompt=None,calibration_warning=None,gripper_status=None):
     canvas=np.full((720,1440,3),22,np.uint8)
     canvas[:540,:960]=cv2.resize(camera,(960,540))
     cv2.line(canvas,(960,0),(960,720),(80,80,80),2)
@@ -38,6 +38,7 @@ def compose_task_preview(camera,lines,stage,paused=False,start_requested=False,d
     elif stage=='ready':
         title=('START REQUESTED - SHOW WRIST' if direct else 'START REQUESTED - SHOW OPEN HAND') if start_requested else 'READY - SPACE / START TO BEGIN'
     else:title=stage.upper()+' - C TO RECENTER'
+    if gripper_status and not paused:title=gripper_status
     cv2.putText(canvas,title,(16,590),cv2.FONT_HERSHEY_SIMPLEX,.8,(0,230,255),2,cv2.LINE_AA)
     for i,line in enumerate(((prompt or calibration_warning or 'Wrist drives arm; missing fingers hold gripper.' if direct else
                              'Assisted mode requires measured hand gestures.'),

@@ -98,6 +98,7 @@ class HumanPinchControl:
         self.closed=False;self.state='LOST';self.reason='PINCH_MISSING';self.last_accepted=None;self.features=None
 
     def update(self,features,stamp):
+        continuous_tracking=self.mode=='continuous' and self.state=='TRACKING'
         if self.last_stamp is not None and stamp<=self.last_stamp:
             self.reason='NON_MONOTONIC_SOURCE';return self.aperture
         dt=.05 if self.last_stamp is None else stamp-self.last_stamp;self.last_stamp=stamp;self.features=features
@@ -131,7 +132,7 @@ class HumanPinchControl:
         if candidate!=self.candidate:
             self.candidate=candidate;self.candidate_since=stamp;self.candidate_count=1
         else:self.candidate_count+=1
-        if self.candidate_count<2 or stamp-self.candidate_since<.03:
+        if not continuous_tracking and (self.candidate_count<2 or stamp-self.candidate_since<.03):
             self.state='REACQUIRING';self.reason='PINCH_CONFIRMING';return self.aperture
         self.state='TRACKING';self.reason='' if self.calibration.profile else 'UNCALIBRATED_ENDPOINTS'
         self.last_accepted=stamp

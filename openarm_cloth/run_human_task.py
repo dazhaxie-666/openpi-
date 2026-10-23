@@ -26,6 +26,7 @@ from human_pinch_control import TaskHandControl,save_personal_calibration,load_p
 from live_bimanual_stream import hand_landmarker_thresholds,apply_vision_reacquire
 from human_task_preview import compose_task_preview,PreviewCadence,poll_task_preview,calibration_prompt
 from human_task_diagnostics import diagnostic_phase,diagnostic_fields,diagnostic_summary
+from human_gripper_hold import GripperHold
 
 
 def direct_hand_command(command,hand,stage,held_aperture,paused=False):
@@ -273,6 +274,7 @@ def run(args):
                     synthetic_input=bool(args.scripted_check), side='right',
                     human_side='right', robot_side='right', pose_model=args.pose_model, camera_device=args.camera,hand_thresholds=hand_thresholds,
                     personal_calibration_path=str(args.calibration.resolve()),
+                    gripper_hold_controls='L toggle current aperture; H lock half open; direct wrist only; default continuous',
                     motion_mapping='pose2arm_original_online' if use_a else 'relative_wrist',
                     controlled_arms=list(active_sides), a_reference_order='left-first',
                     a_reference_execution='B dynamic actuator targets; no second Cartesian IK' if use_a else None,
@@ -301,7 +303,7 @@ def run(args):
                         'live_bimanual_stream.py', 'full_video_source.py', 'pose2arm_task_mapping.py',
                         'live_reference_conditioning.py','live_observation_quality.py',
                         'motion_observation.py','human_wrist_control.py','human_pinch_control.py',
-                        'human_task_diagnostics.py','human_task_preview.py','live_test_dataset.py')})
+                        'human_task_diagnostics.py','human_task_preview.py','human_gripper_hold.py','live_test_dataset.py')})
     if use_a:
         metadata['a_source_hashes']={name:hashlib.sha256((ROOT.parent/'pose2arm-main'/name).read_bytes()).hexdigest()
                                     for name in ('openarm_live.py','retarget.py','ik_solver.py','smoothing.py','openarm_common.py')}
@@ -311,7 +313,9 @@ def run(args):
     a_mapper = a_worker = hand_tracker = None
     video_writer = None
     diagnostic_recorder=None
+    gripper_hold=GripperHold()
     flags = dict(start=False, paused=False, quit=False, recenter=False, reacquire=False, mirror=bool(args.mirror_preview),calibrate=None)
+    flags['gripper_action']=None
     failure = None
     clock = cursor = 0.
     dt = .05
@@ -337,6 +341,8 @@ def run(args):
             flags['mirror'] = not flags['mirror']
         elif direct and code in (71,103):flags['calibrate']='closed'
         elif direct and code in (79,111):flags['calibrate']='open'
+        elif direct and not use_a and code in (76,108):flags['gripper_action']='toggle'
+        elif direct and not use_a and code in (72,104):flags['gripper_action']='half'
 
     def mouse(event, x, y, _flags, _param):
         if event == cv2.EVENT_LBUTTONUP and 12 <= x <= 235 and 488 <= y <= 530:
@@ -428,6 +434,8 @@ def run(args):
                 print('PERSONAL GRIPPER calibration: '+str(args.calibration.resolve())+
                       ' | G pinch / O spread x10 each; hold 1.2s; READY means valid endpoints, Q saves.',flush=True)
             print(f'PREVIEW at most {preview_hz:g} Hz; control target 20 Hz; keyboard polled every control tick.',flush=True)
+            if direct and not use_a:
+                print('GRIPPER: L holds current aperture / resumes fingers; H explicitly holds 50%. Default remains continuous.',flush=True)
             index = 0
             expected_sim_time = float(data.time)
             while not flags['quit'] and task.stage not in task.terminal:
@@ -513,6 +521,15 @@ def run(args):
                         task.message='A mapping waiting for fresh body observations (no queued old motions)'
                 if hand_tracker is not None:
                     command=direct_hand_command(command,hand_result,task.stage,robot.finger_targets['right'],flags['paused'])
+                    action=flags['gripper_action'];flags['gripper_action']=None
+                    if action and task.stage=='direct':
+                        if action=='half':gripper_hold.lock(.022)
+                        elif gripper_hold.locked:gripper_hold.release(hand_result['seq'] if hand_result else -1)
+                        else:gripper_hold.lock(robot.finger_targets['right'])
+                        task.events.append(dict(time_s=float(clock),previous=task.stage,stage=task.stage,
+                            reason='operator_gripper_'+gripper_hold.mode,
+                            aperture_m=gripper_hold.aperture if gripper_hold.locked else None))
+                    command=gripper_hold.apply(command,hand_result,task.stage,robot.finger_targets['right'],flags['paused'])
                 tracking_status, observation_age, wrist_visibility = tracking_diagnostic(
                     obs, human, time.perf_counter(), source_clock=source is not None)
                 if args.scripted_check:
@@ -563,6 +580,8 @@ def run(args):
                            pinch_reason=np.asarray(hand_result['reason'] if hand_result else (a_result.get('module_reason',{}).get('right',{}).get('pinch','') if a_result else '')),
                            pinch_reference_m=np.asarray(hand_result['aperture'] if hand_result else (a_result.get('fingers',{}).get('right',np.nan) if a_result else np.nan)),
                            pinch_reference_valid=np.asarray(bool(hand_result['valid']) if hand_result else bool(a_result and a_result.get('finger_valid',{}).get('right'))),
+                           gripper_input_mode=np.asarray(gripper_hold.mode),
+                           gripper_locked_reference_m=np.asarray(gripper_hold.aperture if gripper_hold.locked else np.nan),
                            pinch_features=np.asarray([(hand_result.get('features') or {}).get(k,np.nan) if hand_result else np.nan for k in ('r3','r2')],dtype=float),
                            direct_ik_mode=np.asarray(robot.direct_ik_mode),
                            a_reference_joint=np.concatenate([a_result['joints'].get(s,np.full(7,np.nan)) if a_result else np.full(7,np.nan) for s in ('left','right')]),
@@ -688,9 +707,16 @@ def run(args):
                     if diagnostic:
                         lines.append('DIAGNOSTIC: '+phase.upper())
                         if diagnostic_recorder:lines.append('VIDEO dropped='+str(diagnostic_recorder.dropped_rows)+' error='+str(diagnostic_recorder.error))
+                    grip_status=None
+                    if direct and not use_a:
+                        grip_status=(f'GRIPPER LOCKED {gripper_hold.aperture/.044:.0%} - L resumes fingers'
+                            if gripper_hold.locked else 'GRIPPER RECONNECTING - show fingers' if gripper_hold.mode=='reconnecting'
+                            else 'FINGERS CONTINUOUS | L hold current | H hold half open')
+                        lines.append(grip_status)
                     frame=compose_task_preview(frame,lines,task.stage,flags['paused'],task.start_requested,direct=direct,
                         prompt=prompt if diagnostic else None,
-                        calibration_warning=calibration_prompt(calibration) if direct else None)
+                        calibration_warning=calibration_prompt(calibration) if direct else None,
+                        gripper_status=grip_status if gripper_hold.mode!='continuous' else None)
                     button = 'START' if task.stage == 'ready' else 'RESUME' if flags['paused'] else 'PAUSE'
                     cv2.rectangle(frame, (12, 488), (235, 530), (45, 160, 45), -1)
                     cv2.putText(frame, button, (28, 518), cv2.FONT_HERSHEY_SIMPLEX, .8, (255, 255, 255), 2)

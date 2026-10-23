@@ -83,6 +83,8 @@ B 保留桌面/物块接触检查，受阻侧限步或保持，另一侧及夹�
 连续夹爪另用典型端点插值，并将可用且相互一致的二维间距用于保留小开度，避免半开时提前全闭。旧标定原始试次加载时自动重算，无须重采；需同时复测真实捏合能否充分闭合。见 [连续开度范围修复](openarm_cloth/docs/continuous_pinch_range_fix_20261023_CN.md)。
 
 直接手腕路径的IK与碰撞查询已减少无关动力学计算，新增细分耗时。`--diagnostic-recording --diagnostic-protocol response` 可后台录像并提示65秒半开移动/开度分档/遮挡恢复复测，详见 [执行查询优化与复测](openarm_cloth/docs/direct_query_optimization_20261023_CN.md)。
+
+移动时需要可靠保持夹爪开度：直接手腕模式开始后，H固定半开，L保持当前开度／解除保持。屏幕明确显示LOCKED；解除后等待两帧新有效手部观测再接回连续控制。它是显式操作功能，默认不自动锁定，单目视觉漂移仍需继续解决。详见 [开度保持操作与限制](openarm_cloth/docs/explicit_gripper_hold_20261023_CN.md)。
 试次数达标后还须看到 `CALIBRATION READY`；`NOT READY` 应按原因处理。若提示 `LABELS REVERSED`，换新个人文件重新采样，G=指尖接触，O=两指分开。
 坐站切换后完整入镜仍漏检时，按 R 暂停并重新创建人体/手部视觉跟踪器，等 `VISION REACQUIRING` 消失后检查识别状态。恢复后按空格继续；C 仅重置动作映射，不能替代视觉重识别。若 R 后仍漏检，用 `--save-human-video` 在本地记录一次坐站切换，详见 [站姿诊断流程](openarm_cloth/docs/standing_observation_fix_20261022_CN.md)。
 若人体骨架整体消失或落到背景，先做不加载仿真的摄像头诊断：`& .\run.ps1 -Mode python -ScriptArgs 'diagnose_human_tracking.py','--seconds','35','--save-video','--compare'`。1 标记坐姿、2 标记站姿、R 重识别、Q 保存后对同一录像离线比较检测模式；具体证据边界见上述流程。

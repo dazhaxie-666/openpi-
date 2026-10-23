@@ -50,5 +50,16 @@ class ContinuousPinchRangeTests(unittest.TestCase):
         c=HumanPinchControl('binary',self.calibration())
         self.assertEqual(self.settle(c,dict(r3=.30,r2=.50)),0.)
 
+    def test_continuous_crossing_label_boundary_does_not_pause_valid_measurements(self):
+        c=HumanPinchControl('continuous',self.calibration())
+        for i in range(3):c.update(dict(r3=.3,r2=.24),i*.05)
+        self.assertEqual(c.state,'TRACKING')
+        c.update(dict(r3=.5,r2=.52),.15)
+        self.assertEqual(c.state,'TRACKING')
+        self.assertAlmostEqual(c.last_accepted,.15)
+        c.update(None,.2)
+        c.update(dict(r3=.5,r2=.52),.25)
+        self.assertEqual(c.state,'REACQUIRING')
+
 
 if __name__=='__main__':unittest.main()
