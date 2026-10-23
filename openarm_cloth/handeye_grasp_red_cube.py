@@ -1004,6 +1004,7 @@ def solve_gripper_contact_proxy_q(
     multi_start: bool = True,
     closing_direction: np.ndarray | None = None,
     approach_down_weight: float = 0.0,
+    kinematics_only: bool = False,
 ) -> tuple[np.ndarray, float, tuple[np.ndarray, np.ndarray], dict[str, float]]:
     """IK on calibrated physical pad-contact points, not mesh origins.
 
@@ -1035,7 +1036,12 @@ def solve_gripper_contact_proxy_q(
         data.qvel[spec.dof] = 0.0
         data.qpos[qpos_indices] = finger_q
         data.qvel[dof_indices] = 0.0
-        mujoco.mj_forward(model, data)
+        if kinematics_only:
+            # Direct teleoperation residuals read only pad transforms. Contact
+            # and dynamics remain separate checked/physical execution stages.
+            mujoco.mj_kinematics(model, data)
+        else:
+            mujoco.mj_forward(model, data)
         points = []
         for geom_id, local in zip(finger_geom_ids, contact_proxy_local):
             rotation = data.geom_xmat[geom_id].reshape(3, 3)

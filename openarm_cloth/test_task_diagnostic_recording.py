@@ -10,6 +10,14 @@ from live_test_dataset import TestDatasetRecorder
 
 
 class TaskDiagnosticRecordingTests(unittest.TestCase):
+    def test_response_protocol_keeps_half_open_motion_separate_from_pinch_and_recovery(self):
+        self.assertEqual(diagnostic_phase(None,'response')[0],'WAIT_START')
+        self.assertEqual([diagnostic_phase(t,'response')[0] for t in (0,5,15,25,35,50,55,65)],
+            ['settle_half','half_left_right','half_up_down','half_forward_back',
+             'aperture_steps','brief_occlusion','recovery_half','response_end'])
+        self.assertIn('HALF OPEN',diagnostic_phase(10,'response')[1])
+        with self.assertRaises(ValueError):diagnostic_phase(0,'invalid')
+
     def test_protocol_waits_for_start_and_has_distinct_depth_and_hand_back_labels(self):
         self.assertEqual(diagnostic_phase(None)[0],'WAIT_START')
         self.assertEqual(diagnostic_phase(0)[0],'rest')

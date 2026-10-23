@@ -251,6 +251,7 @@ def run(args):
     use_a = direct and args.mapping == 'pose2arm'
     diagnostic=bool(getattr(args,'diagnostic_recording',False))
     diagnostic_seconds=float(getattr(args,'diagnostic_seconds',65.))
+    diagnostic_protocol=getattr(args,'diagnostic_protocol','axes')
     if diagnostic:
         if not direct or use_a or args.video:raise ValueError('diagnostic recording requires live direct --mapping wrist (or explicit scripted check)')
         if not np.isfinite(diagnostic_seconds) or diagnostic_seconds<=0:raise ValueError('diagnostic seconds must be positive')
@@ -286,6 +287,7 @@ def run(args):
                     alignment='images and qpos/action_target sampled before the same physical step',
                     human_video_saved=bool(args.save_human_video or (diagnostic and not args.scripted_check)),
                     diagnostic_recording=diagnostic,diagnostic_seconds=diagnostic_seconds if diagnostic else None,
+                    diagnostic_protocol=diagnostic_protocol if diagnostic else None,
                     human_video_layout='human_diagnostic/: chunked video + source timestamp CSV' if diagnostic else 'human_camera.mp4',
                     preview_mirrored=bool(args.mirror_preview),
                     preview_hz=preview_hz,preview_policy='latest frame; input events polled every control tick',
@@ -542,6 +544,10 @@ def run(args):
                            reference_submit_ns=np.asarray(round(execute_start*1e9),dtype=np.int64),
                            physics_begin_ns=np.asarray(0,dtype=np.int64),physics_end_ns=np.asarray(0,dtype=np.int64),
                            observe_ms=np.asarray(observe_ms),mapping_ms=np.asarray(mapping_ms),execute_ms=np.asarray(execute_ms),
+                           ik_ms=np.asarray(robot.execution_timing.get('ik_ms',np.nan)),
+                           collision_check_ms=np.asarray(robot.execution_timing.get('collision_check_ms',np.nan)),
+                           planning_query_ms=np.asarray(robot.execution_timing.get('planning_query_ms',np.nan)),
+                           payload_ms=np.asarray(robot.execution_timing.get('payload_ms',np.nan)),
                            image_record_ms=np.asarray(np.nan),physics_ms=np.asarray(np.nan),ui_ms=np.asarray(np.nan),
                            pose_inference_ms=np.asarray(obs.get('pose_ms',np.nan) if obs else np.nan),
                            hand_inference_ms=np.asarray(obs.get('hand_ms',np.nan) if obs else np.nan),
@@ -597,7 +603,7 @@ def run(args):
                     row['human_hand_filtered']=np.asarray(arm['hand_filtered']).copy() if arm.get('hand_filtered') is not None else np.full((21,3),np.nan)
                     row['hand_observation_reason']=np.asarray(arm.get('hand_quality','NO_OBSERVATION'))
                     row['hand_roi_used']=np.asarray(bool(arm.get('roi_used',False)))
-                phase,prompt=diagnostic_phase(None if task.started is None else clock-task.started)
+                phase,prompt=diagnostic_phase(None if task.started is None else clock-task.started,diagnostic_protocol)
                 row['diagnostic_phase']=np.asarray(phase if diagnostic else 'disabled')
                 image_start=time.perf_counter()
                 if render is not None:
@@ -820,6 +826,7 @@ def main():
     parser.add_argument('--save-human-video', action='store_true', help='Opt in to LOCAL raw human video')
     parser.add_argument('--diagnostic-recording',action='store_true',help='Opt in to local asynchronous human video + guided axis/pinch trace; disables PNG recording')
     parser.add_argument('--diagnostic-seconds',type=float,default=65.,help='Active seconds after START before diagnostic session saves and ends')
+    parser.add_argument('--diagnostic-protocol',choices=('axes','response'),default='axes',help='Guided axis diagnosis or half-open moving/recovery response test')
     parser.add_argument('--preview-hz',type=float,default=10.,help='Maximum camera/3D preview refresh rate; keyboard still polled every control tick')
     parser.add_argument('--mirror-preview', action=argparse.BooleanOptionalAction, default=True,
                         help='Mirror preview only; detection, anatomical identity and raw recordings stay unchanged. M toggles.')

@@ -2,8 +2,20 @@
 import numpy as np
 
 
-def diagnostic_phase(elapsed):
+def diagnostic_phase(elapsed,protocol='axes'):
+    if protocol not in ('axes','response'):raise ValueError('unknown diagnostic protocol')
     if elapsed is None:return 'WAIT_START','Press START when right wrist is visible'
+    if protocol=='response':
+        for end,name,prompt in (
+            (5,'settle_half','Hold wrist at center, keep fingers HALF OPEN'),
+            (15,'half_left_right','Keep HALF OPEN; move wrist LEFT / RIGHT slowly'),
+            (25,'half_up_down','Keep HALF OPEN; move wrist UP / DOWN slowly'),
+            (35,'half_forward_back','Keep HALF OPEN; reach FORWARD / BACK slowly'),
+            (50,'aperture_steps','Wrist still: pinch / small gap / half / full; hold 2s each'),
+            (55,'brief_occlusion','Cover fingers briefly (1s), then show HALF OPEN'),
+            (65,'recovery_half','Keep HALF OPEN and still; wait for automatic save')):
+            if elapsed<end:return name,prompt
+        return 'response_end','Finished; saving recording'
     for end,name,prompt in (
         (5,'rest','Hold still at a comfortable center'),
         (15,'left_right','Move wrist LEFT / RIGHT; keep height and depth'),
@@ -27,8 +39,9 @@ def diagnostic_fields(task,command):
 
 def diagnostic_summary(rows,video):
     timing={}
-    for name in ('observe_ms','mapping_ms','execute_ms','image_record_ms','physics_ms','ui_ms','control_work_ms'):
-        values=np.array([float(r[name]) for r in rows]);values=values[np.isfinite(values)]
+    for name in ('observe_ms','mapping_ms','execute_ms','planning_query_ms','payload_ms','ik_ms',
+                 'collision_check_ms','image_record_ms','physics_ms','ui_ms','control_work_ms'):
+        values=np.array([float(r.get(name,np.nan)) for r in rows]);values=values[np.isfinite(values)]
         timing[name]=dict(p50=float(np.median(values)),p95=float(np.percentile(values,95))) if len(values) else None
     phases={}
     for phase in sorted({str(r['diagnostic_phase']) for r in rows}):

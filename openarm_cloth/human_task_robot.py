@@ -4,6 +4,7 @@ Planning copies robot encoders plus CAMERA object estimates into a private query
 state. Object ground truth is confined to TaskEvaluator, never fed to control.
 """
 import mujoco
+import time
 import numpy as np
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
@@ -65,6 +66,9 @@ class HumanTaskRobot:
         self.attachment = None
         self.attachment_rotation = None
         self.query = mujoco.MjData(model)
+        self.ik_query = mujoco.MjData(model)
+        self.fast_query_mode = False
+        self.execution_timing = {}
         self.robot_addresses = [int(model.jnt_qposadr[j]) for j in range(model.njnt)
                                 if (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, j) or '').startswith('openarm_')]
         self.robot_geoms = {g for g in range(model.ngeom)
@@ -142,6 +146,15 @@ class HumanTaskRobot:
         visual = self.plan if self.attached else self.visual
         if visual is None:
             raise RuntimeError('camera_target_missing')
+        if getattr(self,'fast_query_mode',False):
+            state=self.ik_query
+            state.qpos[:]=self.model.qpos0;state.qvel[:]=0.;state.ctrl[:]=0.
+            state.qpos[self.robot_addresses]=self.data.qpos[self.robot_addresses]
+            adr=self.object_address;yaw=visual['yaw']
+            state.qpos[adr:adr+3]=visual['center']
+            state.qpos[adr+3:adr+7]=[np.cos(yaw/2),0.,0.,np.sin(yaw/2)]
+            mujoco.mj_kinematics(self.model,state)
+            return state
         return visual_planning_state(self.model, self.data, visual['center'], visual['yaw'])
 
     def _cartesian(self, target, closed):
@@ -168,7 +181,11 @@ class HumanTaskRobot:
             query.qpos[self.control.specs[side].qpos] = target
         for side, aperture in (finger_overrides or {}).items():
             query.qpos[finger_joint_indices(self.model, side)[0]] = aperture
-        mujoco.mj_forward(self.model, query)
+        fast=getattr(self,'fast_query_mode',False)
+        if not fast:
+            mujoco.mj_forward(self.model, query)
+        elif attached:
+            mujoco.mj_kinematics(self.model,query)
         # Keep the same measured object geometry as the accepted docking plan.
         # Fresh frames still gate movement detection; occlusion must not silently
         # move collision geometry while the joint goal stays on an old target.
@@ -187,7 +204,12 @@ class HumanTaskRobot:
             query.qpos[self.object_address + 3:self.object_address + 7] = quat
         else:
             query.qpos[self.object_address + 3:self.object_address + 7] = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]
-        mujoco.mj_forward(self.model, query)
+        if fast:
+            # Position pipeline includes collision detection and constraints;
+            # query code consumes contact distances, not forces/accelerations.
+            mujoco.mj_fwdPosition(self.model,query)
+        else:
+            mujoco.mj_forward(self.model, query)
         hits = {}
         for c in query.contact:
             pair = tuple(sorted((int(c.geom1), int(c.geom2))))
@@ -258,6 +280,8 @@ class HumanTaskRobot:
 
     def execute(self, command, clock, dt=.05):
         self.warning = None
+        self.fast_query_mode=command.stage in ('direct','gripper_reference')
+        self.execution_timing=dict(ik_ms=0.,collision_check_ms=0.,planning_query_ms=0.,payload_ms=0.)
         try:
             self._execute(command, clock, dt)
         except (RuntimeError, ValueError) as error:
@@ -285,11 +309,15 @@ class HumanTaskRobot:
 
     def _execute_gripper_reference(self,command,clock,dt):
         if not np.isfinite(command.finger) or not 0<=command.finger<=.044:raise ValueError('invalid gripper aperture')
+        phase=time.perf_counter()
         self._direct_payload(clock,opening=command.finger>.022)
+        self.execution_timing['payload_ms']+=(time.perf_counter()-phase)*1000
         if not self.attached and self.fresh_visual(clock) is None:raise RuntimeError('camera_target_missing_for_gripper_collision_check')
         held=self.data.qpos[self.spec.qpos].copy()
         finger=float(self.finger_targets[self.side]+np.clip(command.finger-self.finger_targets[self.side],-.132*dt,.132*dt))
-        self._check_segment(held,finger,'direct_grip')
+        phase=time.perf_counter()
+        try:self._check_segment(held,finger,'direct_grip')
+        finally:self.execution_timing['collision_check_ms']+=(time.perf_counter()-phase)*1000
         self.joints[self.side]=held;self.finger_targets[self.side]=finger
         self.control.set_targets(self.joints,self.finger_targets)
         self.command_stage='gripper_reference';self.goal_q=self.goal_xyz=None
@@ -425,7 +453,7 @@ class HumanTaskRobot:
         lower, upper = self.spec.q_range[:, 0] + 1e-7, self.spec.q_range[:, 1] - 1e-7
         def residual(q):
             state.qpos[self.spec.qpos] = q
-            mujoco.mj_forward(self.model, state)
+            mujoco.mj_kinematics(self.model, state)
             center = pad_points(self.model, state, self.side).mean(0)
             frame = state.geom_xmat[self.geoms[0]].reshape(3, 3)
             angular = Rotation.from_matrix(reference @ frame.T).as_rotvec()
@@ -441,10 +469,15 @@ class HumanTaskRobot:
         return result.x.copy()
 
     def _execute_direct(self, command, clock, dt):
+        phase=time.perf_counter()
         self._direct_payload(clock, opening=command.finger > .022)
+        self.execution_timing['payload_ms']=(time.perf_counter()-phase)*1000
         if not self.attached and self.fresh_visual(clock) is None:
             raise RuntimeError('camera_target_missing_for_collision_geometry')
+        phase=time.perf_counter()
         state = self._query_state()
+        self.execution_timing['planning_query_ms']=(time.perf_counter()-phase)*1000
+        phase=time.perf_counter()
         points = pad_points(self.model, self.data, self.side)
         span = float(np.linalg.norm(points[0] - points[1]))
         # The pad direction and orientation residual must describe the SAME
@@ -453,23 +486,30 @@ class HumanTaskRobot:
         current_rotation = self.data.geom_xmat[self.geoms[0]].reshape(3, 3)
         direction = self.rotation @ (current_rotation.T @ ((points[0] - points[1]) / max(span, 1e-9)))
         old_finger = float(np.mean(self.data.qpos[self.fingers[0]]))
-        goal, _, _, metrics = solve_gripper_contact_proxy_q(
-            self.model, state, self.spec, self.geoms, self.fingers, PAD_CONTACT_PROXY_LOCAL,
-            np.asarray(command.target), 1, 1., span, old_finger, self.joints[self.side],
-            reference_rotation=self.rotation, multi_start=False,
-            closing_direction=direction)
-        self.direct_ik_mode = 'fixed_wrist'
-        if metrics['midpoint_error_m'] > .008 or metrics['perpendicular_error_m'] > .008:
-            goal = self._direct_position_goal(np.asarray(command.target), state)
-            self.direct_ik_mode = 'position_priority'
+        try:
+            goal, _, _, metrics = solve_gripper_contact_proxy_q(
+                self.model, state, self.spec, self.geoms, self.fingers, PAD_CONTACT_PROXY_LOCAL,
+                np.asarray(command.target), 1, 1., span, old_finger, self.joints[self.side],
+                reference_rotation=self.rotation, multi_start=False,
+                closing_direction=direction,kinematics_only=True)
+            self.direct_ik_mode = 'fixed_wrist'
+            if metrics['midpoint_error_m'] > .008 or metrics['perpendicular_error_m'] > .008:
+                goal = self._direct_position_goal(np.asarray(command.target), state)
+                self.direct_ik_mode = 'position_priority'
+        finally:
+            self.execution_timing['ik_ms']=(time.perf_counter()-phase)*1000
         finger = float(self.finger_targets[self.side] + np.clip(
             command.finger - self.finger_targets[self.side], -.0066, .0066))
         cap = np.array([.8] * 4 + [1.5] * 3) * dt
         commanded = self.joints[self.side] + np.clip(goal - self.joints[self.side], -cap, cap)
         # Check arm displacement at the measured aperture before allowing pad
         # contact from finger closure. Closing never exempts an unchecked arm path.
-        self._check_segment(commanded, old_finger, 'direct_carry' if self.attached else 'direct_move')
-        self._check_segment(commanded, finger, 'direct_grip')
+        phase=time.perf_counter()
+        try:
+            self._check_segment(commanded, old_finger, 'direct_carry' if self.attached else 'direct_move')
+            self._check_segment(commanded, finger, 'direct_grip')
+        finally:
+            self.execution_timing['collision_check_ms']=(time.perf_counter()-phase)*1000
         self.joints[self.side] = commanded
         self.finger_targets[self.side] = finger
         self.control.set_targets(self.joints, self.finger_targets)
