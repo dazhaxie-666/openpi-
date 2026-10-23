@@ -58,9 +58,16 @@ class PinchCalibration:
             a=float(np.percentile(groups['closed'],95));b=float(np.percentile(groups['open'],5))
             if field=='r3' and np.percentile(groups['closed'],5)>np.percentile(groups['open'],95):
                 self.reason='OPEN_CLOSED_LABELS_REVERSED';return False
-            noise=max(float(np.std([np.median([v[field] for v in trial if v.get(field) is not None]) for trial in self.trials[label] if any(v.get(field) is not None for v in trial)])) for label in self.trials)
+            # Estimate tracking noise while each pose is held. Variation of
+            # trial medians includes intentional differences in open extent;
+            # the endpoint percentiles above already account for that spread.
+            noise=max(float(np.median([np.std([v[field] for v in trial if v.get(field) is not None])
+                for trial in self.trials[label] if any(v.get(field) is not None for v in trial)]))
+                for label in self.trials)
             if b-a<=max(.05,6*noise):
-                if field=='r3':self.reason='OPEN_CLOSED_DISTRIBUTIONS_OVERLAP';return False
+                if field=='r3':
+                    self.reason='OPEN_CLOSED_DISTRIBUTIONS_OVERLAP' if b<=a else 'OPEN_CLOSED_MARGIN_TOO_SMALL'
+                    return False
                 continue
             profile[field]=dict(closed=a,open=b,close_threshold=a+.25*(b-a),open_threshold=a+.75*(b-a))
         self.profile=profile;self.reason=''
