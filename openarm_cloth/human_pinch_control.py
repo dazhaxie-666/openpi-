@@ -70,6 +70,14 @@ class PinchCalibration:
                     return False
                 continue
             profile[field]=dict(closed=a,open=b,close_threshold=a+.25*(b-a),open_threshold=a+.75*(b-a))
+            # Class bounds are intentionally conservative for gesture labels.
+            # Continuous aperture instead uses the typical held endpoints so
+            # the upper tail of closed samples cannot erase a visible gap.
+            centers={label:[float(np.median([v[field] for v in trial if v.get(field) is not None]))
+                for trial in self.trials[label] if any(v.get(field) is not None for v in trial)]
+                for label in self.trials}
+            profile[field].update(continuous_closed=float(np.median(centers['closed'])),
+                                  continuous_open=float(np.median(centers['open'])))
         self.profile=profile;self.reason=''
         self.calibration_id=hashlib.sha256(json.dumps(profile,sort_keys=True).encode()).hexdigest()[:16]
         return True
@@ -104,12 +112,17 @@ class HumanPinchControl:
         openness={}
         for key,endpoints in profile.items():
             ratio=features.get(key)
-            if ratio is not None:openness[key]=float(np.clip((ratio-endpoints['closed'])/(endpoints['open']-endpoints['closed']),0.,1.))
+            closed=endpoints.get('continuous_closed',endpoints['closed']) if self.mode=='continuous' else endpoints['closed']
+            opened=endpoints.get('continuous_open',endpoints['open']) if self.mode=='continuous' else endpoints['open']
+            if ratio is not None:openness[key]=float(np.clip((ratio-closed)/(opened-closed),0.,1.))
         if 'r3' not in openness:return self.aperture
         if 'r2' in openness and abs(openness['r2']-openness['r3'])>.4:
             self.state='HOLD';self.reason='PINCH_2D_3D_CONFLICT';self.candidate=None;self.candidate_count=0
             return self.aperture
-        wanted=openness['r3']
+        # When both calibrated channels are observable and agree within the
+        # conflict bound above, visible separation must not be erased by a
+        # low monocular depth estimate. Full closure needs both near zero.
+        wanted=max(openness.values()) if self.mode=='continuous' else openness['r3']
         if self.raw is not None and abs(features['r3']-self.raw)>.35+12*min(dt,.1):
             self.raw=features['r3'];self.state='REACQUIRING';self.reason='PINCH_TEMPORAL_OUTLIER';self.candidate=None;self.candidate_count=0
             return self.aperture

@@ -58,6 +58,11 @@ class IndependentFingerExecutionTests(unittest.TestCase):
 
 
 class HandChannelTests(unittest.TestCase):
+    def setUp(self):
+        # Synthetic endpoint fixtures must not absorb this user's saved trials.
+        loader=patch('human_pinch_control.load_personal_calibration',return_value={})
+        loader.start();self.addCleanup(loader.stop)
+
     def result(self,ratio=.65):
         channel=TaskHandControl()
         for i in range(5):result=channel.process_features(i,i*.05,dict(r3=ratio,r2=None))
