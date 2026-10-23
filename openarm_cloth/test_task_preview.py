@@ -17,13 +17,21 @@ class TaskPreviewTests(unittest.TestCase):
     def test_pause_key_and_closed_window_are_serviced_between_previews(self):
         cadence=PreviewCadence(10.);cadence.due(0.)
         keys=[]
-        with patch('human_task_preview.cv2.waitKey',side_effect=[32,255]),patch(
+        with patch('human_task_preview.cv2.pollKey',side_effect=[32,-1]),patch(
                 'human_task_preview.cv2.getWindowProperty',side_effect=[1.,0.]):
             self.assertFalse(cadence.due(.01))
             self.assertTrue(poll_task_preview('fixture',keys.append))
             self.assertFalse(cadence.due(.02))
             self.assertFalse(poll_task_preview('fixture',keys.append))
         self.assertEqual(keys,[32])
+
+    def test_operator_poll_does_not_wait_for_windows_timer_quantum(self):
+        with patch('human_task_preview.cv2.pollKey',return_value=ord('h')),patch(
+                'human_task_preview.cv2.waitKey',side_effect=AssertionError('blocking input poll')),patch(
+                'human_task_preview.cv2.getWindowProperty',return_value=1.):
+            keys=[]
+            self.assertTrue(poll_task_preview('fixture',keys.append))
+            self.assertEqual(keys,[ord('h')])
 
     def test_invalid_preview_rate_cannot_disable_operator_window(self):
         for hz in (0.,-1.,float('nan'),float('inf')):

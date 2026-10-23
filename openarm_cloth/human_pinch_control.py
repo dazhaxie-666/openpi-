@@ -91,14 +91,21 @@ class PinchCalibration:
 
 
 class HumanPinchControl:
-    def __init__(self,mode='continuous',calibration=None):
+    def __init__(self,mode='continuous',calibration=None,contact_guard=False):
         if mode not in ('continuous','binary','hold'):raise ValueError('unknown gripper mode')
         self.mode=mode;self.calibration=calibration or PinchCalibration();self.aperture=.044
         self.filter=AdaptiveReferenceFilter(3.,1.5);self.last_stamp=None;self.raw=None;self.candidate=None;self.candidate_since=None;self.candidate_count=0
         self.closed=False;self.state='LOST';self.reason='PINCH_MISSING';self.last_accepted=None;self.features=None
+        self.contact_guard=bool(contact_guard)
+        self.aperture_history=[]
+        self.reset_contact_evidence()
+
+    def reset_contact_evidence(self):
+        self.contact_since=None;self.contact_count=0
 
     def update(self,features,stamp):
-        continuous_tracking=self.mode=='continuous' and self.state=='TRACKING'
+        continuous_tracking=self.mode=='continuous' and (self.state=='TRACKING' or
+            self.reason=='PINCH_CLOSURE_CONFIRMING' and self.last_accepted is not None)
         if self.last_stamp is not None and stamp<=self.last_stamp:
             self.reason='NON_MONOTONIC_SOURCE';return self.aperture
         dt=.05 if self.last_stamp is None else stamp-self.last_stamp;self.last_stamp=stamp;self.features=features
@@ -108,6 +115,8 @@ class HumanPinchControl:
         if features is None or dt>.25:
             self.state='HOLD' if self.last_accepted is not None else 'LOST';self.reason='PINCH_MISSING' if features is None else 'SOURCE_GAP'
             self.candidate=self.candidate_since=None;self.candidate_count=0;self.filter.stamp=None;self.raw=None
+            self.reset_contact_evidence()
+            self.aperture_history.clear()
             return self.aperture
         profile=self.calibration.profile or dict(r3=dict(closed=.15,open=1.2))
         openness={}
@@ -119,6 +128,8 @@ class HumanPinchControl:
         if 'r3' not in openness:return self.aperture
         if 'r2' in openness and abs(openness['r2']-openness['r3'])>.4:
             self.state='HOLD';self.reason='PINCH_2D_3D_CONFLICT';self.candidate=None;self.candidate_count=0
+            self.reset_contact_evidence()
+            self.aperture_history.clear()
             return self.aperture
         # When both calibrated channels are observable and agree within the
         # conflict bound above, visible separation must not be erased by a
@@ -126,12 +137,23 @@ class HumanPinchControl:
         wanted=max(openness.values()) if self.mode=='continuous' else openness['r3']
         if self.raw is not None and abs(features['r3']-self.raw)>.35+12*min(dt,.1):
             self.raw=features['r3'];self.state='REACQUIRING';self.reason='PINCH_TEMPORAL_OUTLIER';self.candidate=None;self.candidate_count=0
+            self.reset_contact_evidence()
+            self.aperture_history.clear()
             return self.aperture
         self.raw=features['r3']
         candidate='closed' if wanted<.25 else 'open' if wanted>.75 else 'middle'
         if candidate!=self.candidate:
             self.candidate=candidate;self.candidate_since=stamp;self.candidate_count=1
         else:self.candidate_count+=1
+        if self.contact_guard and self.mode=='continuous' and wanted<.15:
+            # Source-clock persistence, not a minimum aperture or binary latch:
+            # a brief flip-induced collapse cannot authorize a near-close.
+            if self.contact_since is None:self.contact_since=stamp
+            self.contact_count+=1
+            if self.contact_count<3 or stamp-self.contact_since<.12:
+                self.state='REACQUIRING';self.reason='PINCH_CLOSURE_CONFIRMING'
+                return self.aperture
+        else:self.reset_contact_evidence()
         if not continuous_tracking and (self.candidate_count<2 or stamp-self.candidate_since<.03):
             self.state='REACQUIRING';self.reason='PINCH_CONFIRMING';return self.aperture
         self.state='TRACKING';self.reason='' if self.calibration.profile else 'UNCALIBRATED_ENDPOINTS'
@@ -139,7 +161,14 @@ class HumanPinchControl:
         if candidate=='closed':self.closed=True
         elif candidate=='open':self.closed=False
         if self.mode=='binary':self.aperture=0. if self.closed else .044
-        elif self.mode=='continuous':self.aperture=float(self.filter.update(wanted,stamp))*.044
+        elif self.mode=='continuous':
+            if self.contact_guard:
+                # Only accepted source observations enter this causal window.
+                # It rejects isolated spikes, with about one source-frame delay
+                # on a real sustained change; it never advances on poll repeats.
+                self.aperture_history=(self.aperture_history+[wanted])[-3:]
+                if len(self.aperture_history)==3:wanted=float(np.median(self.aperture_history))
+            self.aperture=float(self.filter.update(wanted,stamp))*.044
         return self.aperture
 
 
@@ -154,7 +183,7 @@ class TaskHandControl:
         from motion_observation import SourceClock
         self.profiles=load_personal_calibration(calibration_path)
         self.calibration=PinchCalibration(self.profiles.get('right'))
-        self.control=HumanPinchControl(mode,self.calibration)
+        self.control=HumanPinchControl(mode,self.calibration,contact_guard=True)
         self.control.aperture=float(initial_aperture);self.control.closed=initial_aperture<.022
         self.clock=SourceClock();self.capture=None;self.seq=-1;self.stamp=None
 
@@ -173,6 +202,8 @@ class TaskHandControl:
     def missing(self,reason='HAND_MISSING'):
         c=self.control;c.state='HOLD' if c.last_accepted is not None else 'LOST';c.reason=reason
         c.candidate=c.candidate_since=None;c.candidate_count=0;c.features=None;c.filter.stamp=None;c.raw=None
+        c.reset_contact_evidence()
+        c.aperture_history.clear()
         return self.snapshot()
 
     def process(self,obs,now_s,source_clock=False,image_size=(1280,720)):

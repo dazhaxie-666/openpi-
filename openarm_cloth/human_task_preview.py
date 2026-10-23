@@ -24,7 +24,9 @@ def calibration_prompt(summary):
 
 def poll_task_preview(window,key):
     """Keyboard and close events are serviced even between rendered frames."""
-    code=cv2.waitKey(1)&255
+    # WIN32 waitKey(1) often waits one Windows timer quantum (~15ms).
+    # pollKey still pumps HighGUI input/close events without that forced wait.
+    code=cv2.pollKey()&255
     if code!=255:key(code)
     return cv2.getWindowProperty(window,cv2.WND_PROP_VISIBLE)>=1
 
