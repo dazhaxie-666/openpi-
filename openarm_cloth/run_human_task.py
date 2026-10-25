@@ -389,13 +389,14 @@ def run(args):
         if args.video:
             path = args.video.resolve()
             cache = ROOT / 'outputs' / 'human_task' / 'cache' / (path.stem + '_landmarks.npz')
-            source = FullVideoSource(load_full_landmarks(path, cache, False))
+            source = FullVideoSource(load_full_landmarks(path, cache, False, expected_sides=active_sides))
             with path.open('rb') as video_file:
                 metadata.update(source_video=str(path), source_sha256=hashlib.file_digest(video_file, 'sha256').hexdigest())
         elif not args.scripted_check:
             from live_bimanual_stream import BimanualHumanStream
             stream = BimanualHumanStream(args.camera,args.pose_model,(1280,720),hand_confidence=args.hand_confidence,
-                hand_presence_confidence=args.hand_presence_confidence,hand_tracking_confidence=args.hand_tracking_confidence)
+                hand_presence_confidence=args.hand_presence_confidence,hand_tracking_confidence=args.hand_tracking_confidence,
+                expected_sides=active_sides)
         metadata.update(nq=model.nq, nv=model.nv, nu=model.nu, timestep_s=float(model.opt.timestep),
                         robot_joint_names=[model.joint(i).name for i in range(model.njnt)],
                         robot_qpos_index={s: spec.qpos.tolist() for s, spec in robot.control.specs.items()},

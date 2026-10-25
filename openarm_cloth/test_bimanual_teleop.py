@@ -98,5 +98,28 @@ class AssociationTests(unittest.TestCase):
         np.testing.assert_allclose(assigned['left']['wrist'],[.7,.5])
         np.testing.assert_allclose(assigned['right']['wrist'],[.3,.5])
 
+    def test_single_expected_side_binds_lone_hand_without_pose(self):
+        candidate=self.candidate([.9,.5])
+        assigned=assign_candidates([candidate],None,np.full((2,2),np.nan),
+                                   expected_sides=('right',))
+        self.assertEqual(set(assigned),{'right'})
+        self.assertIs(assigned['right'],candidate)
+
+    def test_single_expected_side_ignores_far_pose_wrist(self):
+        p=self.pose();p[16,:2]=[.05,.05]
+        candidate=self.candidate([.9,.5])
+        assigned=assign_candidates([candidate],p,np.full((2,2),np.nan),
+                                   expected_sides=('right',))
+        self.assertEqual(set(assigned),{'right'})
+
+    def test_bimanual_default_still_rejects_unposed_lone_hand(self):
+        self.assertEqual(assign_candidates([self.candidate([.9,.5])],None,
+                                           np.full((2,2),np.nan)),{})
+
+    def test_unknown_expected_side_is_rejected(self):
+        with self.assertRaises(ValueError):
+            assign_candidates([],None,np.full((2,2),np.nan),
+                              expected_sides=('middle',))
+
 
 if __name__=='__main__': unittest.main()

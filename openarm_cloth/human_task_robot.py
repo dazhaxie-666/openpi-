@@ -88,7 +88,10 @@ class HumanTaskRobot:
         Uses B's pad IK at a fixed workspace coordinate, independent of the cube.
         Subsequent episode motion uses only dynamic actuators.
         """
-        ik = PadCartesianIK(self.model, self.data, ready=np.array([.43, -.10, .54]))
+        # Start above the cube rather than above the goal zone. The old
+        # y=-.10 start forced the operator to spend most of the relative wrist
+        # travel just reaching the cube, and made the workspace clip early.
+        ik = PadCartesianIK(self.model, self.data, ready=np.array([.43, 0., .54]))
         self.data.qpos[self.spec.qpos] = ik.ready_q
         self.data.qvel[:] = 0.
         mujoco.mj_forward(self.model, self.data)

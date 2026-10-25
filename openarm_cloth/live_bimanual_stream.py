@@ -20,12 +20,28 @@ from motion_observation import SourceClock
 SIDES=('left','right')
 
 
-def assign_candidates(candidates,pose,previous,image_size=(1280,720),predictions=None):
+def assign_candidates(candidates,pose,previous,image_size=(1280,720),predictions=None,
+                      expected_sides=SIDES):
     """Deduplicate overlapping crops, then one-to-one anatomical association.
 
     One physical detection can never drive both grippers. Ambiguous overlapping
     hands remain missing; they are not assigned just to fill both channels.
+
+    In a single-arm task ``expected_sides`` has one entry. A lone credible hand
+    is then bound to that side without requiring it to sit near a drifting Pose
+    wrist. Bimanual callers keep the default two-sided anatomical association.
     """
+    expected=(expected_sides,) if isinstance(expected_sides,str) else tuple(expected_sides)
+    if not expected or any(s not in SIDES for s in expected):
+        raise ValueError('expected_sides must be a non-empty subset of left/right')
+    unique=[]
+    for c in sorted(candidates,key=lambda c:c['score'],reverse=True):
+        if not any(np.linalg.norm(c['wrist']-d['wrist'])<.035 for d in unique): unique.append(c)
+    if len(expected)==1 and len(unique)==1 and np.isfinite(unique[0]['wrist']).all():
+        # The operator has already selected one controlled arm. A second hand
+        # is not available to disambiguate anatomy here, so do not let a noisy
+        # Pose wrist discard an otherwise credible hand detection.
+        return {expected[0]:unique[0]}
     if pose is None or np.shape(pose)!=(33,4):return {}
     # Association requires a fresh, visible body wrist. Labels and previous
     # positions may break ties, but cannot invent an anatomical anchor.
@@ -42,9 +58,6 @@ def assign_candidates(candidates,pose,previous,image_size=(1280,720),predictions
     previous=np.full((2,2),np.nan)  # no missing-body fallback in associate_hands
     wh=np.asarray(image_size,dtype=float)
     tolerance=wrist_tolerance(pose,image_size)
-    unique=[]
-    for c in sorted(candidates,key=lambda c:c['score'],reverse=True):
-        if not any(np.linalg.norm(c['wrist']-d['wrist'])<.035 for d in unique): unique.append(c)
     best={};best_cost=float('inf')
     for subset in combinations(unique,min(2,len(unique))):
         # Pixel-space distance handles the camera's non-square aspect ratio.
@@ -67,6 +80,8 @@ def assign_candidates(candidates,pose,previous,image_size=(1280,720),predictions
             prediction=(predictions or {}).get(side);alternative=(predictions or {}).get(SIDES[other])
             distinguished=prediction is not None and alternative is not None and np.linalg.norm((candidate['wrist']-prediction[0])*wh)+15<np.linalg.norm((candidate['wrist']-alternative[0])*wh)
             if not distinguished:best.pop(side)
+    if len(expected)==1:
+        best={side:candidate for side,candidate in best.items() if side in expected}
     return best
 
 
@@ -159,9 +174,13 @@ def apply_vision_reacquire(flags,stream,mapping=None):
 
 class BimanualHumanStream:
     def __init__(self,device=0,pose_model='full',resolution=(1280,720),camera_factory=None,
-                 hand_confidence=.5,hand_presence_confidence=None,hand_tracking_confidence=None):
+                 hand_confidence=.5,hand_presence_confidence=None,hand_tracking_confidence=None,
+                 expected_sides=SIDES):
         self.latest=None;self.error=None;self.camera=None;self.closed=False;self.metadata={}
         self.hand_thresholds=hand_landmarker_thresholds(hand_confidence,hand_presence_confidence,hand_tracking_confidence)
+        self.expected_sides=(expected_sides,) if isinstance(expected_sides,str) else tuple(expected_sides)
+        if not self.expected_sides or any(s not in SIDES for s in self.expected_sides):
+            raise ValueError('expected_sides must be a non-empty subset of left/right')
         self.lock=threading.Lock();self.device=device;self.pose_model=pose_model;self.resolution=resolution
         self.vision_generation=self.requested_generation=0
         self.camera_factory=camera_factory;self.finished=False
@@ -200,15 +219,22 @@ class BimanualHumanStream:
                         base_options=options(f'pose_landmarker_{self.pose_model}.task'),running_mode=vision.RunningMode.VIDEO,num_poses=1)))
                     full=vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
                         base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2,**self.hand_thresholds)))
-                    crops={s:vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                        base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**self.hand_thresholds))) for s in SIDES}
+                    # Single-arm mode needs only the full-frame hand model. The
+                    # left/right ROI models are for simultaneous bimanual hands;
+                    # creating all three on a CPU-only Windows MediaPipe build
+                    # is the main source of the ~15 FPS direct-task ceiling.
+                    crops={} if len(self.expected_sides)==1 else {
+                        s:vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+                            base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**self.hand_thresholds))) for s in SIDES}
                     return body,full,crops
                 pose,hands,roi=create_landmarkers()
                 pool=stack.enter_context(ThreadPoolExecutor(max_workers=4))
                 self.camera=(self.camera_factory or USBLatestFrame)(self.device,*self.resolution,30)
-                self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),hand_thresholds=self.hand_thresholds,
+                self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),
+                                   expected_sides=list(self.expected_sides),hand_thresholds=self.hand_thresholds,
                                    identity='anatomical left -> robot left, right -> right; preview mirror only',
-                                   hand_search='square ROI + parallel full-frame; fresh body wrist + hand geometry + two-frame confirmation',
+                                   hand_search=('full-frame every frame; one expected hand' if len(self.expected_sides)==1
+                                                else 'square ROI + parallel full-frame; fresh body wrist + hand geometry + two-frame confirmation'),
                                    observation_gate='body/hand wrist consistency; missing anchors never use handedness fallback',
                                    vision_recovery='R: pause + recreate body/full-hand/ROI VIDEO trackers; no automatic resume',
                                    filter_clock='camera return timestamps, not variable inference completion')
@@ -249,10 +275,11 @@ class BimanualHumanStream:
                     # models. Do not append a full detector after waiting for all
                     # other models, which creates periodic critical-path spikes.
                     full_future=None
-                    if capture_time-last_full>=200000000:
+                    if (len(self.expected_sides)==1 or capture_time-last_full>=200000000):
                         last_full=capture_time;full_future=pool.submit(full_inference,mp,hands,image,timestamp)
                     hand_futures=[]
-                    for s in SIDES:
+                    for s in self.expected_sides:
+                        if s not in roi:continue
                         recent=last_hand[s] is not None and capture_time-last_hand[s]<=300000000
                         bounds=roi_bounds(previous_pose,s,bgr.shape[1],bgr.shape[0],previous_hand[s] if recent else None)
                         if bounds is None and recent and capture_time-last_hand[s]<=200000000:
@@ -290,7 +317,8 @@ class BimanualHumanStream:
                     previous_pose=association_pose
                     predictions={s:(previous[j]+previous_velocity[j]*min(.12,max(0.,capture_time/1e9-seen[j])),capture_time/1e9-seen[j])
                                  for j,s in enumerate(SIDES) if np.isfinite(previous[j]).all()}
-                    associated=assign_candidates(candidates,association_pose,previous,image_size,predictions)
+                    associated=assign_candidates(candidates,association_pose,previous,image_size,predictions,
+                                                 expected_sides=self.expected_sides)
                     assigned=confirmation.update(associated,capture_time/1e9,image_size)
                     hand_done=time.perf_counter_ns();arms={}
                     for index,s in enumerate(SIDES):

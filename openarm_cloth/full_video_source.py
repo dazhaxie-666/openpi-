@@ -14,28 +14,31 @@ from smoothing import VectorOneEuroFilter
 SIDES=('left','right')
 
 
-def load_full_landmarks(video,cache,refresh=False):
+def load_full_landmarks(video,cache,refresh=False,expected_sides=SIDES):
     video=Path(video).resolve();cache=Path(cache)
+    expected=(expected_sides,) if isinstance(expected_sides,str) else tuple(expected_sides)
+    if not expected or any(s not in SIDES for s in expected):raise ValueError('unknown expected hand side')
     with video.open('rb') as stream: digest=hashlib.file_digest(stream,'sha256').hexdigest()
     if cache.is_file() and not refresh:
         with np.load(cache,allow_pickle=False) as z:
-            if int(z['schema_version'])==1 and str(z['source_sha256'].item())==digest:
+            cached_sides=tuple(z['expected_sides'].tolist()) if 'expected_sides' in z.files else None
+            if int(z['schema_version'])==1 and str(z['source_sha256'].item())==digest and cached_sides==expected:
                 return {k:z[k] for k in z.files}
     from extract_pose import extract_from_video
     from extract_hand import extract_hands_from_video,normalized_pinch_distance
     from gripper_map import map_positions
     print('A full motion: extracting every body and hand frame',flush=True)
     pose=extract_from_video(str(video))
-    hands=extract_hands_from_video(str(video),pose_norm=pose['pose'])
+    hands=extract_hands_from_video(str(video),pose_norm=pose['pose'],expected_sides=expected)
     capture=cv2.VideoCapture(str(video))
     width=int(capture.get(cv2.CAP_PROP_FRAME_WIDTH));height=int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT));capture.release()
     n=len(pose['pose_world']);fps=float(pose['fps'])
     if len(hands['hand_world'])!=n: raise ValueError('A body/hand video clocks differ')
     closure=np.column_stack([map_positions(normalized_pinch_distance(hands['hand_world'],s)[0],fps) for s in SIDES])
     result=dict(schema_version=np.array(1),source_sha256=np.array(digest),source_video=np.array(str(video)),
-                fps=np.array(fps),image_size=np.array([width,height]),pose_world=pose['pose_world'],
-                pose_norm=pose['pose'],hand_world=hands['hand_world'],hand_norm=hands['hand_img'],
-                hand_valid=hands['hand_present'],closure=closure)
+                expected_sides=np.array(expected),fps=np.array(fps),image_size=np.array([width,height]),
+                pose_world=pose['pose_world'],pose_norm=pose['pose'],hand_world=hands['hand_world'],
+                hand_norm=hands['hand_img'],hand_valid=hands['hand_present'],closure=closure)
     cache.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(cache,**result)
     return result
 

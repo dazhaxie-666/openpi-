@@ -76,6 +76,8 @@ B 保留桌面/物块接触检查，受阻侧限步或保持，另一侧及夹�
 `--arms right` 仅控制右臂；`--mapping wrist` 保留此前小工作区手腕位置控制。
 桌面末端位置操作可用 `--mapping wrist --gripper-mode continuous`，现在也使用个人捏合端点与连续开度；G 合拢/O 张开各至少 10 次，每次保持 1.2 秒。
 
+2026-10-25：单臂任务自动传入 `expected_sides=('right',)`：画面只有一只可信手时直接归右手，不再要求它靠近漂移的 Pose 腕点；单臂流只创建一个全图手部模型，跳过左右 ROI 模型以降低 CPU 压力。机器人初始 TCP 改为方块上方 `[0.43, 0, 0.54]`。详情与验证见 [单臂关联与初始姿态更新](openarm_cloth/docs/single_arm_hand_association_20261025_CN.md)。
+
 2026-10-23：手腕模式连续捏合新增短暂误闭合确认、三帧去毛刺，并去掉 Windows 预览轮询约15ms的主动等待。沿用原标定；本次复测不需要H/L。改善指标、响应延迟和仍存在的视角漂移见 [捏合去毛刺与预览修正](openarm_cloth/docs/pinch_spike_preview_fix_20261023_CN.md)。
 
 手腕直接模式到工作区边界后不再累积越界位移，返向目标可立即响应。预览默认最多10 Hz，键盘每个控制周期处理；可加 `--preview-hz 5` 降低显示负担。平时不需要机器人 PNG 数据时可加 `--no-images`，诊断录制会自动关闭这些 PNG。未标定时屏幕有黄色 G/O 提示，启动日志打印实际标定路径；达到 `CALIBRATION READY` 后 Q 保存。详见 [边界响应及预览修复](openarm_cloth/docs/wrist_boundary_preview_fix_20261022_CN.md)。
