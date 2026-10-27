@@ -9,7 +9,7 @@ import traceback
 import cv2
 import numpy as np
 
-from human_teleop_core import ROOT,human_arm_pose,human_wrist
+from human_teleop_core import ROOT,human_arm_pose,human_wrist,human_upper_body_wrist
 from human_gripper_gestures import fist_features
 from hand_association import associate_hands
 from member_b_realtime import USBLatestFrame
@@ -20,31 +20,44 @@ from motion_observation import SourceClock
 SIDES=('left','right')
 
 
-def assign_candidates(candidates,pose,previous,image_size=(1280,720),predictions=None):
+def assign_candidates(candidates,pose,previous,image_size=(1280,720),predictions=None,
+                      expected_sides=SIDES):
     """Deduplicate overlapping crops, then one-to-one anatomical association.
 
     One physical detection can never drive both grippers. Ambiguous overlapping
     hands remain missing; they are not assigned just to fill both channels.
+
+    In a single-arm task ``expected_sides`` has one entry. A lone credible hand
+    is then bound to that side without requiring it to sit near a drifting Pose
+    wrist. Bimanual callers keep the default two-sided anatomical association.
     """
+    expected=(expected_sides,) if isinstance(expected_sides,str) else tuple(expected_sides)
+    if not expected or any(s not in SIDES for s in expected):
+        raise ValueError('expected_sides must be a non-empty subset of left/right')
+    unique=[]
+    for c in sorted(candidates,key=lambda c:c['score'],reverse=True):
+        if not any(np.linalg.norm(c['wrist']-d['wrist'])<.035 for d in unique): unique.append(c)
+    if len(expected)==1 and len(unique)==1 and np.isfinite(unique[0]['wrist']).all():
+        # The operator has already selected one controlled arm. A second hand
+        # is not available to disambiguate anatomy here, so do not let a noisy
+        # Pose wrist discard an otherwise credible hand detection.
+        return {expected[0]:unique[0]}
     if pose is None or np.shape(pose)!=(33,4):return {}
     # Association requires a fresh, visible body wrist. Labels and previous
     # positions may break ties, but cannot invent an anatomical anchor.
     pose=np.asarray(pose,dtype=float).copy()
     for j,s in enumerate(SIDES):
         prediction=(predictions or {}).get(s)
-        if prediction is not None and pose[15+j,3]<.6 and np.isfinite(pose[[11,12]]).all() and np.min(pose[[11,12],3])>=.65:
+        if prediction is not None and pose[15+j,3]<.6 and np.isfinite(pose[[11,12]][:,[0,1,3]]).all() and np.min(pose[[11,12],3])>=.65:
             point,age=prediction
             if 0<=age<=.12 and np.isfinite(point).all():pose[15+j,:2]=point;pose[15+j,3]=1.
     for wrist in (15,16):
-        if not np.isfinite(pose[wrist]).all() or pose[wrist,3]<.6:
+        if not np.isfinite(pose[wrist,[0,1,3]]).all() or pose[wrist,3]<.6:
             pose[wrist,3]=0.
     if not np.any(pose[[15,16],3]>=.6):return {}
     previous=np.full((2,2),np.nan)  # no missing-body fallback in associate_hands
     wh=np.asarray(image_size,dtype=float)
     tolerance=wrist_tolerance(pose,image_size)
-    unique=[]
-    for c in sorted(candidates,key=lambda c:c['score'],reverse=True):
-        if not any(np.linalg.norm(c['wrist']-d['wrist'])<.035 for d in unique): unique.append(c)
     best={};best_cost=float('inf')
     for subset in combinations(unique,min(2,len(unique))):
         # Pixel-space distance handles the camera's non-square aspect ratio.
@@ -67,6 +80,8 @@ def assign_candidates(candidates,pose,previous,image_size=(1280,720),predictions
             prediction=(predictions or {}).get(side);alternative=(predictions or {}).get(SIDES[other])
             distinguished=prediction is not None and alternative is not None and np.linalg.norm((candidate['wrist']-prediction[0])*wh)+15<np.linalg.norm((candidate['wrist']-alternative[0])*wh)
             if not distinguished:best.pop(side)
+    if len(expected)==1:
+        best={side:candidate for side,candidate in best.items() if side in expected}
     return best
 
 
@@ -82,7 +97,7 @@ def tracked_hand_roi(hand,width,height,predicted=None):
     return lo,lo+size
 
 
-def roi_bounds(pose,side,width,height,hand_norm=None):
+def roi_bounds(pose,side,width,height,hand_norm=None,allow_missing_elbow=False):
     """Causal square crop; a foreshortened forearm must not shrink a large hand.
 
     The most recently seen complete hand supplies its extent. Shoulder width
@@ -90,12 +105,18 @@ def roi_bounds(pose,side,width,height,hand_norm=None):
     At an image edge move the square inside, rather than clipping off fingers.
     """
     elbow,wrist=(13,15) if side=='left' else (14,16)
-    if pose is None or pose[wrist,3]<.6 or not np.isfinite(pose[[11,12,elbow,wrist]]).all(): return None
+    if pose is None or pose[wrist,3]<.6 or not np.isfinite(pose[[11,12,wrist]][:,[0,1,3]]).all(): return None
     if np.any(pose[wrist,:2]<0) or np.any(pose[wrist,:2]>1): return None
-    wh=np.array([width,height]);w=pose[wrist,:2]*wh;e=pose[elbow,:2]*wh
+    wh=np.array([width,height]);w=pose[wrist,:2]*wh
     shoulder=np.linalg.norm((pose[11,:2]-pose[12,:2])*wh)
     context=max(min(wh)*.34,shoulder*.7)
-    center=w+.4*(w-e);size=max(np.linalg.norm(w-e)*1.6,context)
+    finite_elbow=np.isfinite(pose[elbow,[0,1,3]]).all()
+    elbow_ok=finite_elbow and (not allow_missing_elbow or
+        pose[elbow,3]>=.6 and np.all((pose[elbow,:2]>=0)&(pose[elbow,:2]<=1)))
+    if not elbow_ok and not allow_missing_elbow:return None
+    if elbow_ok:
+        e=pose[elbow,:2]*wh;center=w+.4*(w-e);size=max(np.linalg.norm(w-e)*1.6,context)
+    else:center=w;size=context
     if hand_norm is not None:
         hand=np.asarray(hand_norm,dtype=float)
         if hand.shape==(21,3) and np.isfinite(hand).all():
@@ -107,6 +128,27 @@ def roi_bounds(pose,side,width,height,hand_norm=None):
     size=int(np.clip(size,min(100,min(wh)),min(wh)*.76))
     lo=np.clip(np.round(center-size/2).astype(int),0,wh-size);hi=lo+size
     return (lo,hi) if np.min(hi-lo)>=100 else None
+
+
+def single_hand_roi(pose,side,width,height,hand=None,predicted=None):
+    """Keep shoulder-scaled context when a foreshortened hand shrinks its box.
+
+    Recent complete hand bounds still supply their centre/extent. Preserve the
+    existing forearm-context recovery when no recent hand is available: a
+    wrist-centred replacement regressed startup on the recorded comparison.
+    This does not change bimanual crops.
+    """
+    wh=np.array([width,height]);base=tracked_hand_roi(hand,width,height,predicted)
+    if base is None:return roi_bounds(pose,side,width,height,allow_missing_elbow=True)
+    p=None if pose is None else np.asarray(pose)
+    shoulders=(p is not None and p.shape==(33,4) and np.isfinite(p[[11,12]][:,[0,1,3]]).all()
+               and np.min(p[[11,12],3])>=.6)
+    context=max(120.,float(np.linalg.norm((p[11,:2]-p[12,:2])*wh))) if shoulders else 120.
+    center=(base[0]+base[1])/2;size=max(context,float(base[1][0]-base[0][0]))
+    size=int(np.clip(np.ceil(size),min(100,min(wh)),min(wh)*.76))
+    if size<100:return None
+    lo=np.clip(np.rint(center-size/2).astype(int),0,wh-size)
+    return lo,lo+size
 
 
 def roi_inference(mp,detector,rgb,bounds,timestamp,side):
@@ -159,9 +201,22 @@ def apply_vision_reacquire(flags,stream,mapping=None):
 
 class BimanualHumanStream:
     def __init__(self,device=0,pose_model='full',resolution=(1280,720),camera_factory=None,
-                 hand_confidence=.5,hand_presence_confidence=None,hand_tracking_confidence=None):
+                 hand_confidence=.5,hand_presence_confidence=None,hand_tracking_confidence=None,
+                 expected_sides=SIDES,hand_search='adaptive',position_frame='original',body_position_source='mediapipe',elbow_recovery=False):
         self.latest=None;self.error=None;self.camera=None;self.closed=False;self.metadata={}
         self.hand_thresholds=hand_landmarker_thresholds(hand_confidence,hand_presence_confidence,hand_tracking_confidence)
+        self.expected_sides=(expected_sides,) if isinstance(expected_sides,str) else tuple(expected_sides)
+        if not self.expected_sides or any(s not in SIDES for s in self.expected_sides):
+            raise ValueError('expected_sides must be a non-empty subset of left/right')
+        if hand_search not in ('adaptive','full'):raise ValueError('unknown hand search policy')
+        self.hand_search=hand_search
+        if position_frame not in ('original','upper-body'):raise ValueError('unknown position frame')
+        self.position_frame=position_frame
+        if body_position_source not in ('mediapipe','rtmpose'):raise ValueError('unknown body position source')
+        if body_position_source=='rtmpose' and (position_frame!='upper-body' or len(self.expected_sides)!=1):
+            raise ValueError('2D body input requires single-arm upper-body position mode')
+        self.body_position_source=body_position_source
+        self.elbow_recovery=bool(elbow_recovery and body_position_source=='mediapipe' and len(self.expected_sides)==1)
         self.lock=threading.Lock();self.device=device;self.pose_model=pose_model;self.resolution=resolution
         self.vision_generation=self.requested_generation=0
         self.camera_factory=camera_factory;self.finished=False
@@ -169,6 +224,12 @@ class BimanualHumanStream:
 
     def snapshot(self):
         with self.lock: return self.latest
+
+    def preview_snapshot(self):
+        """Raw latest camera image for display only, never an accepted command."""
+        camera=self.camera
+        if camera is None or not hasattr(camera,'condition'):return None
+        with camera.condition:return camera.latest
 
     def request_reacquire(self):
         """Invalidate old observations immediately; rebuild models in their owner thread.
@@ -194,21 +255,44 @@ class BimanualHumanStream:
             models=ROOT.parent/'pose2arm-main'/'models'
             def options(name): return python.BaseOptions(model_asset_path=str(models/name))
             with ExitStack() as stack:
+                from human_body_2d import ImageBodyDetector,image_plane_wrist,same_person_image
+                from live_reference_conditioning import AdaptiveReferenceFilter
+                image_body=ImageBodyDetector() if self.body_position_source=='rtmpose' else None
+                position_filters={s:AdaptiveReferenceFilter(min_cutoff=3.,beta=3.) for s in SIDES}
                 vision_stack=stack.enter_context(ExitStack())
                 def create_landmarkers():
                     body=vision_stack.enter_context(vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
                         base_options=options(f'pose_landmarker_{self.pose_model}.task'),running_mode=vision.RunningMode.VIDEO,num_poses=1)))
                     full=vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
                         base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=2,**self.hand_thresholds)))
-                    crops={s:vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
-                        base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**self.hand_thresholds))) for s in SIDES}
+                    # A one-hand crop can use VIDEO tracking without searching
+                    # for an absent second hand every frame. Keep the two-hand
+                    # full-image model for recovery and ambiguity checks.
+                    crop_sides=() if len(self.expected_sides)==1 and self.hand_search=='full' else self.expected_sides
+                    crops={
+                        s:vision_stack.enter_context(vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
+                            base_options=options('hand_landmarker.task'),running_mode=vision.RunningMode.VIDEO,num_hands=1,**self.hand_thresholds))) for s in crop_sides}
                     return body,full,crops
                 pose,hands,roi=create_landmarkers()
                 pool=stack.enter_context(ThreadPoolExecutor(max_workers=4))
+                recovery=None;recovery_error=None
+                if self.elbow_recovery:
+                    from elbow_recovery import BackgroundElbowRecovery,select_display_pose
+                    try:recovery=BackgroundElbowRecovery(pool)
+                    except Exception as error:recovery_error=f'{type(error).__name__}: {error}'
                 self.camera=(self.camera_factory or USBLatestFrame)(self.device,*self.resolution,30)
-                self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),hand_thresholds=self.hand_thresholds,
+                self.metadata=dict(self.camera.metadata,pose_model=self.pose_model,arms=list(SIDES),
+                                   expected_sides=list(self.expected_sides),hand_thresholds=self.hand_thresholds,
+                                   position_frame=self.position_frame,
+                                   body_position_source=self.body_position_source,
+                                   elbow_recovery_scope='background image elbow overlay only; control and hand crops remain MediaPipe' if recovery else None,
+                                   elbow_recovery_error=recovery_error,
+                                   body_2d_model_sha256=image_body.sha256 if image_body else None,
+                                   body_2d_scope='image shoulder/elbow/wrist; nominal shoulder-relative Y/Z; no model 3D; palm supplies X' if image_body else None,
                                    identity='anatomical left -> robot left, right -> right; preview mirror only',
-                                   hand_search='square ROI + parallel full-frame; fresh body wrist + hand geometry + two-frame confirmation',
+                                   hand_search=(('single-hand ROI tracking + body-guided recovery; two-hand full-frame audit at 5 Hz and on loss' if self.hand_search=='adaptive'
+                                                 else 'full-frame every frame; one expected hand') if len(self.expected_sides)==1
+                                                else 'square ROI + parallel full-frame; fresh body wrist + hand geometry + two-frame confirmation'),
                                    observation_gate='body/hand wrist consistency; missing anchors never use handedness fallback',
                                    vision_recovery='R: pause + recreate body/full-hand/ROI VIDEO trackers; no automatic resume',
                                    filter_clock='camera return timestamps, not variable inference completion')
@@ -219,9 +303,10 @@ class BimanualHumanStream:
                 confirmation=ConfirmedHands()
                 source_clock=SourceClock();processed=skipped=0;last_source=0
                 previous_velocity=np.zeros((2,2));last_previous=np.full((2,2),np.nan)
-                normals={s:None for s in SIDES};previous_pose=None;previous_hand={s:None for s in SIDES}
+                normals={s:None for s in SIDES};previous_pose=None;previous_hand={s:None for s in SIDES};body_context=None
                 sequence=0;timestamp=-1;last_infer=None;last_full=0
-                generation=0;reacquire_ms=0.
+                single_missing=True
+                generation=0;reacquire_ms=0.;last_display_repair=-np.inf
                 while not self.closed:
                     with self.lock:requested=self.requested_generation
                     if requested!=generation:
@@ -236,6 +321,10 @@ class BimanualHumanStream:
                         confirmation=ConfirmedHands();previous_velocity=np.zeros((2,2))
                         normals={s:None for s in SIDES};previous_pose=None;previous_hand={s:None for s in SIDES}
                         last_infer=None;last_full=0;generation=requested
+                        single_missing=True
+                        body_context=None
+                        last_display_repair=-np.inf
+                        position_filters={s:AdaptiveReferenceFilter(min_cutoff=3.,beta=3.) for s in SIDES}
                         reacquire_ms=(time.perf_counter_ns()-reset_start)/1e6
                     sequence,read_start,read_end,bgr=self.camera.read_new(sequence)
                     valid_source,source_dt,source_reason=source_clock.accept(sequence,read_end/1e9)
@@ -245,16 +334,27 @@ class BimanualHumanStream:
                     rgb=cv2.cvtColor(bgr,cv2.COLOR_BGR2RGB)
                     image=mp.Image(image_format=mp.ImageFormat.SRGB,data=rgb)
                     pose_future=pool.submit(pose.detect_for_video,image,timestamp)
+                    image_body_future=pool.submit(image_body.detect,bgr,body_context) if image_body is not None else None
                     # Recovery runs on this same input frame alongside body/ROI
                     # models. Do not append a full detector after waiting for all
                     # other models, which creates periodic critical-path spikes.
                     full_future=None
-                    if capture_time-last_full>=200000000:
+                    single=len(self.expected_sides)==1
+                    recent_single=single and last_hand[self.expected_sides[0]] is not None and capture_time-last_hand[self.expected_sides[0]]<=200000000
+                    if (capture_time-last_full>=200000000 or
+                            single and (self.hand_search=='full' or single_missing or not recent_single)):
                         last_full=capture_time;full_future=pool.submit(full_inference,mp,hands,image,timestamp)
                     hand_futures=[]
-                    for s in SIDES:
+                    for s in self.expected_sides:
+                        if s not in roi:continue
                         recent=last_hand[s] is not None and capture_time-last_hand[s]<=300000000
-                        bounds=roi_bounds(previous_pose,s,bgr.shape[1],bgr.shape[0],previous_hand[s] if recent else None)
+                        bounds=None
+                        if single:
+                            j=SIDES.index(s)
+                            prediction=previous[j]+previous_velocity[j]*max(0.,min(.12,capture_time/1e9-seen[j])) if np.isfinite(previous[j]).all() else None
+                            bounds=single_hand_roi(previous_pose,s,bgr.shape[1],bgr.shape[0],
+                                previous_hand[s] if recent else None,prediction)
+                        else:bounds=roi_bounds(previous_pose,s,bgr.shape[1],bgr.shape[0],previous_hand[s] if recent else None)
                         if bounds is None and recent and capture_time-last_hand[s]<=200000000:
                             j=SIDES.index(s)
                             prediction=previous[j]+previous_velocity[j]*max(0.,min(.12,capture_time/1e9-seen[j])) if np.isfinite(previous[j]).all() else None
@@ -275,12 +375,31 @@ class BimanualHumanStream:
                     for future in hand_futures:
                         found,ms=future.result();candidates.extend(found);roi_times.append(ms)
                     if full_future is not None: candidates.extend(full_future.result())
+                    image_body_result=image_body_future.result() if image_body_future is not None else None
+                    position_norm=image_body_result['norm'] if image_body_result is not None else norm
+                    body_context=position_norm
                     previous[(capture_time/1e9-seen)>.2]=np.nan
                     image_size=(bgr.shape[1],bgr.shape[0])
                     candidates=[c for c in candidates if credible_hand(c,image_size)]
                     pose_trusted,pose_quality=body_hand_consistency(norm,candidates,image_size)
-                    position_trusted,position_quality=body_hand_consistency(norm,candidates,image_size,require_elbow=False)
-                    association_pose=None if norm is None else norm.copy()
+                    position_confidence=.45 if image_body is not None else .6
+                    position_trusted,position_quality=body_hand_consistency(position_norm,candidates,image_size,require_elbow=False,min_confidence=position_confidence)
+                    display_trusted,display_quality=body_hand_consistency(position_norm,candidates,image_size,min_confidence=position_confidence)
+                    if image_body is not None and not same_person_image(norm,position_norm,image_size):
+                        position_trusted={s:False for s in SIDES};display_trusted={s:False for s in SIDES}
+                        position_quality={s:'body identity unconfirmed' for s in SIDES}
+                        display_quality=position_quality.copy()
+                    association_pose=None if position_norm is None else position_norm.copy()
+                    display_pose_norm=position_norm;display_stamp=capture_time/1e9;display_repaired=False
+                    display_cache=None
+                    if recovery is not None:
+                        display_cache=recovery.observe(bgr,norm,capture_time/1e9,generation,
+                            any(not display_trusted[s] for s in self.expected_sides) or capture_time/1e9-last_display_repair<1.)
+                        display_pose_norm,display_stamp,display_repaired=select_display_pose(
+                            norm,display_cache,capture_time/1e9,image_size,self.expected_sides)
+                        if display_repaired:
+                            last_display_repair=capture_time/1e9
+                            display_trusted,display_quality=body_hand_consistency(display_pose_norm,candidates,image_size)
                     if association_pose is not None:
                         for j,s in enumerate(SIDES):
                             if not position_trusted[s]:association_pose[15+j,3]=0.
@@ -290,8 +409,10 @@ class BimanualHumanStream:
                     previous_pose=association_pose
                     predictions={s:(previous[j]+previous_velocity[j]*min(.12,max(0.,capture_time/1e9-seen[j])),capture_time/1e9-seen[j])
                                  for j,s in enumerate(SIDES) if np.isfinite(previous[j]).all()}
-                    associated=assign_candidates(candidates,association_pose,previous,image_size,predictions)
+                    associated=assign_candidates(candidates,association_pose,previous,image_size,predictions,
+                                                 expected_sides=self.expected_sides)
                     assigned=confirmation.update(associated,capture_time/1e9,image_size)
+                    single_missing=single and self.expected_sides[0] not in assigned
                     hand_done=time.perf_counter_ns();arms={}
                     for index,s in enumerate(SIDES):
                         candidate=assigned.get(s);hraw=hfiltered=hnorm=fist=None;distance=None
@@ -312,19 +433,25 @@ class BimanualHumanStream:
                             distance=float(np.linalg.norm(hfiltered[4]-hfiltered[8]))
                         arm=human_arm_pose(world,hfiltered,normals[s],side=s) if pose_trusted[s] else None
                         if arm is not None: normals[s]=arm['normal']
+                        image_point=image_plane_wrist(position_norm,s,image_size,min_confidence=position_confidence) if image_body is not None and position_trusted[s] else None
+                        if image_point is not None:image_point=position_filters[s].update(image_point,capture_time/1e9)
                         arms[s]=dict(pose=arm,point=human_wrist(world,s) if pose_trusted[s] else None,hand_valid=candidate is not None,
                                      hand_quality='confirmed' if candidate is not None else ('awaiting second observation' if s in associated else 'no hand at trusted body wrist'),
-                                     position_point=human_wrist(world,s,require_elbow=False) if position_trusted[s] else None,
+                                     position_point=(image_point if image_body is not None else
+                                         (human_upper_body_wrist(world,s) if self.position_frame=='upper-body' else
+                                          human_wrist(world,s,require_elbow=False)) if position_trusted[s] else None),
                                      hand_raw=hraw,hand_filtered=hfiltered,hand_norm=hnorm,fist=fist,distance=distance,
                                      roi_used=candidate is not None and candidate['roi'] is not None)
                     annotated=bgr.copy()
-                    if norm is not None:
+                    if position_norm is not None:
                         for index,s in enumerate(SIDES):
                             color=(255,180,0) if s=='left' else (0,255,255)
-                            if not pose_trusted[s]:color=(110,110,110)
+                            if not display_trusted[s]:color=(110,110,110)
                             for a,b in ((11+index,13+index),(13+index,15+index)):
-                                points=[tuple((norm[i,:2]*[bgr.shape[1],bgr.shape[0]]).astype(int)) for i in (a,b)]
-                                cv2.line(annotated,*points,color,3)
+                                coords=position_norm[[a,b],:2]
+                                if np.isfinite(coords).all() and np.all((coords>=0)&(coords<=1)):
+                                    points=[tuple((position_norm[i,:2]*[bgr.shape[1],bgr.shape[0]]).astype(int)) for i in (a,b)]
+                                    cv2.line(annotated,*points,color,3)
                             hn=arms[s]['hand_norm']
                             if hn is not None:
                                 for p in hn: cv2.circle(annotated,(int(p[0]*bgr.shape[1]),int(p[1]*bgr.shape[0])),3,color,-1)
@@ -332,12 +459,23 @@ class BimanualHumanStream:
                                 vision_generation=generation,vision_reacquire_ms=reacquire_ms,
                                 done=time.perf_counter_ns(),arms=arms,raw_image=bgr,image=annotated,
                                 pose_raw=raw,pose_filtered=world,pose_norm=norm,
+                                position_norm=position_norm,display_trusted=display_trusted,display_quality=display_quality,
+                                display_pose_norm=display_pose_norm,display_pose_read_end=int(display_stamp*1e9),
+                                display_min_confidence=position_confidence,display_elbow_repaired=display_repaired,
+                                display_elbow_ms=display_cache['ms'] if display_cache is not None else 0.,
+                                display_elbow_error=recovery.error if recovery is not None else recovery_error,
+                                body_position_source=self.body_position_source,
+                                position_min_confidence=position_confidence,
+                                body_2d_score=image_body_result['score'] if image_body_result is not None else None,
+                                body_2d_ms=image_body_result['ms'] if image_body_result is not None else 0.,
                                 pose_trusted=pose_trusted,pose_quality=pose_quality,
                                 position_trusted=position_trusted,position_quality=position_quality,
                                 source_dt=source_dt,source_reason=source_reason,
                                 captured_sequence=sequence,processed_sources=processed,skipped_capture_sources=skipped,nonmonotonic_sources=source_clock.rejected,
                                 pose_ms=(pose_done-start)/1e6,hand_ms=(hand_done-start)/1e6,
                                 roi_model_ms=np.asarray(roi_times))
+                    result.update(hand_full_scan=full_future is not None,hand_candidate_count=len(candidates),
+                                  hand_search_policy=self.hand_search)
                     with self.lock:
                         if generation==self.requested_generation:
                             self.latest=result;self.vision_generation=generation

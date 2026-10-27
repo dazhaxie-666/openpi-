@@ -48,6 +48,27 @@ def human_right_pose(world, hand_world=None, previous_normal=None):
     return human_arm_pose(world,hand_world,previous_normal,side='right')
 
 
+def human_upper_body_wrist(world,side='right'):
+    """Shoulder-relative Cartesian point for an upright, frontal RGB camera.
+
+    Preserve Pose model depth; never infer depth from hand size. The vertical
+    camera axis replaces unobserved hips ONLY for this positional reference.
+    This is an upper-body operating assumption, not measured body orientation
+    or calibrated absolute range. Full-arm/palm retargeting keeps its own frame.
+    """
+    if side not in ('left','right'):raise ValueError('unknown human arm side')
+    w=None if world is None else np.asarray(world,dtype=float)
+    wrist=15 if side=='left' else 16;shoulder=11 if side=='left' else 12
+    ids=[11,12,wrist]
+    if w is None or w.shape!=(33,4) or not np.isfinite(w[ids]).all() or np.min(w[ids,3])<.45:return None
+    axis=w[12,:3]-w[11,:3];length=np.linalg.norm(axis)
+    if length<.05:return None
+    x=axis/length;up=np.array([0.,-1.,0.]);y=up-x*np.dot(up,x)
+    if np.linalg.norm(y)<.3:return None
+    y/=np.linalg.norm(y);z=np.cross(x,y)
+    return OPENARM_BODY_TO_ROBOT @ (np.column_stack((x,y,z)).T @ (w[wrist,:3]-w[shoulder,:3]))
+
+
 def human_arm_pose(world,hand_world=None,previous_normal=None,side='right'):
     if human_wrist(world,side) is None: return None
     shoulder,elbow,wrist=(11,13,15) if side=='left' else (12,14,16)

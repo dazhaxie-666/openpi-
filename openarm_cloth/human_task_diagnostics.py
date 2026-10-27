@@ -3,8 +3,22 @@ import numpy as np
 
 
 def diagnostic_phase(elapsed,protocol='axes'):
-    if protocol not in ('axes','response'):raise ValueError('unknown diagnostic protocol')
+    if protocol not in ('axes','response','depth-chain'):raise ValueError('unknown diagnostic protocol')
     if elapsed is None:return 'WAIT_START','Press START when right wrist is visible'
+    if protocol=='depth-chain':
+        for end,name,prompt in (
+            (5,'depth_rest','Hold hand STILL at center; keep shoulder still'),
+            (10,'reach_near','Reach TOWARD CAMERA; hold near position for 2 seconds'),
+            (15,'return_center','Return hand to CENTER; hold 2 seconds'),
+            (20,'reach_far','Pull hand BACK toward body; hold far position 2 seconds'),
+            (25,'return_center','Return hand to CENTER; hold 2 seconds'),
+            (30,'reach_near_repeat','Repeat TOWARD CAMERA; hold 2 seconds'),
+            (35,'reach_far_repeat','Pull hand BACK toward body; hold 2 seconds'),
+            (40,'depth_left_right','Move LEFT / RIGHT only; keep depth and height'),
+            (45,'depth_up_down','Move UP / DOWN only; keep depth and lateral position'),
+            (50,'depth_rest_end','Hold STILL at center; saving at 50 seconds')):
+            if elapsed<end:return name,prompt
+        return 'depth_end','Finished; saving recording'
     if protocol=='response':
         for end,name,prompt in (
             (5,'settle_half','Hold wrist at center, keep fingers HALF OPEN'),
@@ -28,7 +42,8 @@ def diagnostic_phase(elapsed,protocol='axes'):
 
 
 def diagnostic_fields(task,command):
-    trace=getattr(task,'motion_trace',{}) or {}
+    # A previous direct trace must not masquerade as a fresh mapping while held.
+    trace=(getattr(task,'motion_trace',{}) or {}) if command.stage=='direct' else {}
     result={name:np.asarray(trace[name]).copy() if name in trace else np.full(3,np.nan)
             for name in ('human_anchor','robot_anchor','unclipped_goal','workspace_goal','lead_goal','workspace_anchor_shift')}
     result['workspace_clipped']=np.asarray(trace.get('workspace_clipped',[False]*3),dtype=bool)

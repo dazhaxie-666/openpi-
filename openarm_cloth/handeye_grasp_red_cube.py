@@ -52,6 +52,8 @@ class CubeObservation:
     bbox: tuple[int, int, int, int]
     depth_median_m: float
     yaw_world_rad: float = 0.0
+    top_size_xy: tuple[float,float] | None = None
+    top_center_world: np.ndarray | None = None
 
 
 class GraspStepDisplay:
@@ -332,6 +334,8 @@ def estimate_cube_center(
         bbox=(x, y, width, height),
         depth_median_m=float(np.median(values)),
         yaw_world_rad=yaw,
+        top_size_xy=tuple(float(v) for v in rectangle[1]),
+        top_center_world=np.array([*rectangle[0],center[2]]),
     )
 
 

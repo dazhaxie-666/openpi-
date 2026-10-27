@@ -26,6 +26,82 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 & .\run.ps1 -Mode check -ScriptArgs '--check-models'
 ```
 
+## 单臂实时遥操（当前优先）
+
+2026-10-27 抓取任务优先使用共享模式：
+
+```powershell
+& 'D:\openpi\启动共享抓取.ps1'
+```
+
+SPACE 只需开始一次；捏合请求 B RGB-D 抓取，搬运时人控制 XYZ，张手后先下降再松爪。
+最新：恢复视野的抬起幅度跟随人手，不再自动上升到固定高度；自然张手靠近，进入范围直接捏合，无需额外张手准备；新捏合需二维/三维同时确认 0.2 秒。
+见[手动上抬与抓取防误触](openarm_cloth/docs/manual_view_pinch_20261027_CN.md)。
+最新修复张手已识别但下降 IK 失败后锁住搬运的问题：有限腕姿调整；仍不可达时提示换位置并交还搬运。
+详见[放置优化与论文参考](openarm_cloth/docs/placement_release_research_20261027_CN.md)。
+人工靠近到约 7.5 cm 内直接捏合接管；张手 0.7 秒取消，搬运中张手 0.35 秒放下。
+当前 7.5 cm 按方块表面距离计算；贴近遮挡时将手向上抬可先退开恢复视野。
+范围内显示绿色“可以抓取”提示；抓牢后直接张手保持约 0.35 秒放下，不再需要额外捏合准备。
+见[当前提示与放下修复](openarm_cloth/docs/grasp_prompt_release_20261027_CN.md)。
+识别适用范围见[当前接触入口修复](openarm_cloth/docs/contact_entry_fix_20261027_CN.md)。
+试次已覆盖人工靠近全过程，见[当前交互修复](openarm_cloth/docs/shared_human_workflow_20261027_CN.md)。
+遮挡时由人向上移手恢复视野；新完整观测和范围内新捏合才允许规划抓取。抓取自动提起前，明确张手仍会取消。
+自动划分试次并保存机器人 RGB-D；`-NoDataset` 关闭图像采集，`启动修复版遥操.ps1 -Direct` 回到直接遥操。
+见[当前共享抓取说明](openarm_cloth/docs/shared_grasp_dataset_20261027_CN.md)。下方保留此前直接遥操的说明。
+
+最新单臂入口新增手掌相对倾转控制夹爪平面转角、近处捏合触发的有界视觉居中，
+并修复精细区目标每帧从编码器重新起步造成的迟缓。正常入口不变，
+`-PreviousControl` 可回到上一版控制。见[现场追加修复](openarm_cloth/docs/wrist_edge_grasp_fix_20261026_CN.md)。
+默认控制目标已提高到 30 Hz、三维显示目标 20 Hz；同录像实测约 29.22/19.82 Hz。
+需要单独调整时，可给 `run.ps1 -Mode single-arm` 传 `-ScriptArgs '--control-hz','20','--robot-preview-hz','10'`。
+
+当前默认启用自动精细与夹持辅助，抓取过程靠移动、捏合和张手完成，无需模式切换键。
+`& 'D:\openpi\启动修复版遥操.ps1' -NoGraspAssist` 可仅关闭辅助并保留当前识别/映射。
+说明见[自动辅助交付](openarm_cloth/docs/automatic_grasp_assist_20261026_CN.md)。
+
+**2026-10-26 最新入口**：`& 'D:\openpi\启动修复版遥操.ps1'`，或下方 `single-arm`。
+当前是原 MediaPipe + 固定图像左右/上下 + 掌部平面 IPPE 前后输入，默认关闭额外肘点模型。
+SPACE 开始，C 定中心；不要求每次分轴检测。
+实测、边界与回退见[当前交付说明](openarm_cloth/docs/single_arm_emergency_release_20261026_CN.md)。
+以下此前同日的默认值说明为历史过程，当前配置以该交付说明和 `run.ps1` 为准。
+
+**日常直接运行下方 `single-arm`；不需要每次做 50 秒测试。** 最新现场记录发现二维身体控制回归，
+已恢复 MediaPipe 上身控制，前后仍用独立掌部投影。RTMPose 改为后台显示肘部辅助，
+不参与机械臂位置或手部裁切。相机实测、性能修复和验证边界见
+[当前修复与正常操作](openarm_cloth/docs/single_arm_regression_camera_20261026_CN.md)。
+
+最新 50 秒记录后的补偿与性能调整见
+[短时尺度补偿及显示负载](openarm_cloth/docs/single_arm_scale_preview_20261026_CN.md)。
+单臂三维视图现在目标 10 Hz，摄像头独立显示目标 30 Hz；图像失效仍保持。
+
+2026-10-26：用户提供的单目排障方案已接入四层记录、CSV/曲线报告、±2 cm 仿真注入
+及 50 秒定量引导。下一次录制、分析命令和实际检查结果见
+[四层排障执行说明](openarm_cloth/docs/single_arm_four_layer_diagnosis_20261026_CN.md)。
+
+当前先做单臂实时遥操时，使用独立入口：
+
+```powershell
+& .\run.ps1 -Mode single-arm
+```
+
+单臂默认采用上身位置参考（相机竖直、人体大致正对镜头），不再使用画面外的
+推测髋点确定前后/上下轴；支持丢失后的身体手腕局部搜索和工作区边界提示。
+23:04 录像复核后，前后改用 `palm-relative` 掌部相对投影，左右上下保持上身位置；
+SPACE 开始后手停约半秒，看到 `DEPTH_TRACKING` 再做前后动作；C 重新定中心。
+2026-10-26 已删除捏合变化暂停前后的错误耦合，并保留短时观测闪断前的相对参考。
+投影不确定仍保持，原因、现场回放与限制见
+[最新前后输入修复](openarm_cloth/docs/single_arm_depth_decoupling_20261026_CN.md)。
+前送、后收由七关节协调 IK 执行，默认连续位置优先并限制夹爪姿态变化，
+不是逐关节模仿人体肘部。闭合末段修复、整臂动力学对照及论文采用范围见
+[闭合与整臂前后响应](openarm_cloth/docs/single_arm_closure_depth_research_20261025_CN.md)。
+范围、对照命令及尚未完成的真实远距离验收见
+[前后轴与远距离手部说明](openarm_cloth/docs/single_arm_depth_distance_20261025_CN.md)。
+
+右手相对 XYZ + 连续捏合控制右臂，full 人体模型，关闭逐帧机器人 PNG，摄像头独立刷新目标 30 Hz，
+物理按有界墙钟推进。SPACE 开始/暂停，C 定中心，R 重识别，Q 保存。
+细节、对照指标、论文采用边界见 [单臂实时遥操](openarm_cloth/docs/single_arm_realtime_20261025_CN.md)。
+最新显示、慢动作连续性与 `ARM HOLD` 诊断说明见 [后续修复](openarm_cloth/docs/single_arm_preview_continuity_20261025_CN.md)。
+
 ## 实时双臂跟随
 
 2026-10-22 的手部参数、连续夹爪与独立更新修复见 [手部分支集成说明](openarm_cloth/docs/direct_hand_branch_integration_20261022_CN.md)。
@@ -75,6 +151,8 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 B 保留桌面/物块接触检查，受阻侧限步或保持，另一侧及夹爪独立处理；评分仍只看右臂任务。
 `--arms right` 仅控制右臂；`--mapping wrist` 保留此前小工作区手腕位置控制。
 桌面末端位置操作可用 `--mapping wrist --gripper-mode continuous`，现在也使用个人捏合端点与连续开度；G 合拢/O 张开各至少 10 次，每次保持 1.2 秒。
+
+2026-10-25：单臂任务自动传入 `expected_sides=('right',)`：画面只有一只可信手时直接归右手，不再要求它靠近漂移的 Pose 腕点；单臂流只创建一个全图手部模型，跳过左右 ROI 模型以降低 CPU 压力。机器人初始 TCP 改为方块上方 `[0.43, 0, 0.54]`。详情与验证见 [单臂关联与初始姿态更新](openarm_cloth/docs/single_arm_hand_association_20261025_CN.md)。
 
 2026-10-23：手腕模式连续捏合新增短暂误闭合确认、三帧去毛刺，并去掉 Windows 预览轮询约15ms的主动等待。沿用原标定；本次复测不需要H/L。改善指标、响应延迟和仍存在的视角漂移见 [捏合去毛刺与预览修正](openarm_cloth/docs/pinch_spike_preview_fix_20261023_CN.md)。
 

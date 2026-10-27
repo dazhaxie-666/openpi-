@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from single_arm_runtime import recorded_step_durations
 
 
 def validate(path):
@@ -34,7 +35,8 @@ def validate(path):
         for key in ('time_s', 'sim_time_s'):
             if not np.isfinite(rows[key]).all() or np.any(np.diff(rows[key]) < 0):
                 errors.append(key + ': invalid clock order')
-        if n > 1 and not np.allclose(np.diff(rows['sim_time_s']), 1 / manifest['control_hz'], atol=1e-7):
+        durations=recorded_step_durations(rows,manifest,n)
+        if n > 1 and not np.allclose(np.diff(rows['sim_time_s']), durations[:-1], atol=1e-7):
             errors.append('simulation step gaps')
         fingers = rows['action_target'][:, [7, 8, 16, 17]]
         if np.any(fingers < 0) or np.any(fingers > .044 + 1e-9):
@@ -59,6 +61,21 @@ def validate(path):
                     errors.append(camera + '/' + name + ': unreadable/wrong size')
             image_count += len(actual)
         synthetic = bool(manifest['synthetic_input'])
+        shared_observations=manifest.get('shared_observations')
+        if shared_observations:
+            if not shared_observations.get('valid',False):errors.append('shared RGB-D recording incomplete/dropped/error')
+            recorded=0
+            for line in (path/shared_observations['index']).read_text(encoding='utf-8').splitlines():
+                sample=json.loads(line);index=int(sample['control_frame'])
+                if not 0<=index<n or abs(float(rows['time_s'][index])-sample['time_s'])>1e-7:
+                    errors.append('shared image/control timestamp mismatch');continue
+                rgb=cv2.imread(str(path/sample['rgb']))
+                with np.load(path/sample['depth'],allow_pickle=False) as depth_file:depth=depth_file['depth_m']
+                if rgb is None or list(rgb.shape[1::-1])!=sample['size_px'] or depth.shape!=rgb.shape[:2] or not np.isfinite(depth).all():
+                    errors.append('invalid shared RGB-D observation')
+                recorded+=1
+            if recorded!=shared_observations['saved']:errors.append('shared RGB-D count mismatch')
+            image_count+=recorded
         if synthetic != bool(report['synthetic_input']) or synthetic != (manifest['source'] == 'synthetic_software_fixture'):
             errors.append('source/synthetic labels disagree')
         if synthetic and report['human_validation_performed']:
@@ -69,7 +86,8 @@ def validate(path):
         if report['verdict'] == 'PASS':
             if not report['evaluation']['physical_task_success']:
                 errors.append('PASS without independent physics success')
-            required_intents = (('human_direct_start', 'human_direct_close', 'human_direct_open')
+            required_intents = (('human_direct_start','shared_phase_plan','shared_phase_lower') if manifest.get('shared_grasp_workflow') else
+                                ('human_direct_start', 'human_direct_close', 'human_direct_open')
                                 if manifest.get('control_mode') == 'direct' else
                                 ('human_close_near_camera_target', 'human_open_in_goal_zone: assisted_lower_before_release'))
             for reason in required_intents:
@@ -79,16 +97,43 @@ def validate(path):
             warnings.append('recording not finalized')
         if synthetic:
             warnings.append('software fixture; exclude from human-demonstration training and success statistics')
-        if not manifest['cameras']:
+        if not manifest['cameras'] and not shared_observations:
             warnings.append('no robot RGB observations; cannot train a visual policy from this recording')
         if np.any(rows['paused']):
             warnings.append('paused rows must be removed explicitly before training')
         if manifest.get('control_mode') == 'direct':
             warnings.append('continuous direct session may include retries; review/segment successful demonstrations before training')
+        if manifest.get('shared_grasp_workflow'):
+            warnings.append('shared autonomy: use eligible per-trial segments, not the complete session or unassisted-human labels')
+            result['eligible_shared_segments']=sum(bool(t.get('eligible_success_segment')) for t in manifest.get('shared_trials',[]))
+            full_segments=0;last_end=0
+            if manifest.get('shared_segment_schema')=='full_task_v2':
+                for trial in manifest.get('shared_trials',[]):
+                    start=int(trial['start_frame']);end=int(trial['end_frame_exclusive']);request=trial.get('request_frame')
+                    if not 0<=start<end<=n or start<last_end:
+                        errors.append('shared full-task segments overlap/outside saved rows');continue
+                    last_end=end
+                    if not np.all(rows['shared_episode_id'][start:end]==trial['trial_id']):
+                        errors.append('shared episode ID does not match full-task segment')
+                    if request is not None and not start<=request<end:errors.append('shared grasp request outside full-task segment')
+                    if trial.get('eligible_success_segment'):
+                        before=rows['shared_phase'][start:request] if request is not None else []
+                        phases=set(rows['shared_phase'][start:end])
+                        complete=bool('manual' in before and {'close','lift','transport','release','verify'}<=phases)
+                        if not complete or not trial.get('complete_task_segment'):errors.append('eligible shared segment misses approach or task phases')
+                        else:full_segments+=1
+            else:warnings.append('historical shared boundaries start at grasp request; not certified as full-task demonstrations')
+            result['eligible_full_task_segments']=full_segments
         result.update(recording_valid=not errors, frames=n, image_count=image_count,
                       task_success=report['verdict'] == 'PASS', synthetic_input=synthetic,
-                      candidate_for_human_bc_review=bool(not errors and not synthetic and report['verdict'] == 'PASS'
+                      candidate_for_human_bc_review=bool(not manifest.get('shared_grasp_workflow') and not errors and not synthetic and report['verdict'] == 'PASS'
                                                          and manifest['finished']),
+                      candidate_for_shared_bc_review=bool(manifest.get('shared_grasp_workflow') and not errors and not synthetic
+                          and manifest.get('shared_observations',{}).get('valid',False) and manifest['finished']
+                          and result.get('eligible_shared_segments',0)>0),
+                      candidate_for_full_task_bc_review=bool(manifest.get('shared_grasp_workflow') and not errors and not synthetic
+                          and manifest.get('shared_observations',{}).get('valid',False) and manifest['finished']
+                          and result.get('eligible_full_task_segments',0)>0),
                       scope='structural consistency and task gates; not human perception ground truth or a training benchmark')
     except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
         errors.append(f'{type(error).__name__}: {error}')

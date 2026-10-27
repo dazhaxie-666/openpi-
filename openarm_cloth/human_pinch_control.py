@@ -98,16 +98,18 @@ class HumanPinchControl:
         self.closed=False;self.state='LOST';self.reason='PINCH_MISSING';self.last_accepted=None;self.features=None
         self.contact_guard=bool(contact_guard)
         self.aperture_history=[]
+        self.human_closed_envelope=False
         self.reset_contact_evidence()
 
     def reset_contact_evidence(self):
-        self.contact_since=None;self.contact_count=0
+        self.contact_since=None;self.contact_count=0;self.contact_last_wanted=None
 
     def update(self,features,stamp):
         continuous_tracking=self.mode=='continuous' and (self.state=='TRACKING' or
             self.reason=='PINCH_CLOSURE_CONFIRMING' and self.last_accepted is not None)
         if self.last_stamp is not None and stamp<=self.last_stamp:
             self.reason='NON_MONOTONIC_SOURCE';return self.aperture
+        self.human_closed_envelope=False
         dt=.05 if self.last_stamp is None else stamp-self.last_stamp;self.last_stamp=stamp;self.features=features
         if (features is not None and (not np.isfinite(features.get('r3',np.nan)) or features['r3']<0
             or (features.get('r2') is not None and not np.isfinite(features['r2'])))):
@@ -145,12 +147,15 @@ class HumanPinchControl:
         if candidate!=self.candidate:
             self.candidate=candidate;self.candidate_since=stamp;self.candidate_count=1
         else:self.candidate_count+=1
-        if self.contact_guard and self.mode=='continuous' and wanted<.15:
-            # Source-clock persistence, not a minimum aperture or binary latch:
-            # a brief flip-induced collapse cannot authorize a near-close.
+        if self.contact_guard and self.mode=='continuous' and wanted<.30:
+            # Build evidence on the continuous approach, before crossing the
+            # final-contact boundary. A smooth pinch need not stop there again.
+            # A sudden collapse still starts its own source-clock confirmation.
+            if self.contact_last_wanted is not None and self.contact_last_wanted-wanted>.10+1e-9:
+                self.reset_contact_evidence()
             if self.contact_since is None:self.contact_since=stamp
-            self.contact_count+=1
-            if self.contact_count<3 or stamp-self.contact_since<.12:
+            self.contact_count+=1;self.contact_last_wanted=wanted
+            if wanted<.15 and (self.contact_count<3 or stamp-self.contact_since<.12):
                 self.state='REACQUIRING';self.reason='PINCH_CLOSURE_CONFIRMING'
                 return self.aperture
         else:self.reset_contact_evidence()
@@ -163,6 +168,14 @@ class HumanPinchControl:
         if self.mode=='binary':self.aperture=0. if self.closed else .044
         elif self.mode=='continuous':
             if self.contact_guard:
+                # Closed calibration is a measured distribution, not a single
+                # landmark distance. After the source confirmation above,
+                # agreement of BOTH channels with that distribution can finish
+                # closure despite a residual 3-D skeletal fingertip distance.
+                self.human_closed_envelope=bool(wanted<.15 and self.calibration.profile and
+                    all(key in profile and features.get(key) is not None and
+                        features[key]<=profile[key]['closed'] for key in ('r3','r2')))
+                if self.human_closed_envelope:wanted=0.
                 # Only accepted source observations enter this causal window.
                 # It rejects isolated spikes, with about one source-frame delay
                 # on a real sustained change; it never advances on poll repeats.
@@ -201,6 +214,7 @@ class TaskHandControl:
 
     def missing(self,reason='HAND_MISSING'):
         c=self.control;c.state='HOLD' if c.last_accepted is not None else 'LOST';c.reason=reason
+        c.human_closed_envelope=False
         c.candidate=c.candidate_since=None;c.candidate_count=0;c.features=None;c.filter.stamp=None;c.raw=None
         c.reset_contact_evidence()
         c.aperture_history.clear()
@@ -232,6 +246,7 @@ class TaskHandControl:
         ratio=None if not intent_valid or c.features is None else .15+1.05*float(np.clip(
             (c.features['r3']-endpoints['closed'])/(endpoints['open']-endpoints['closed']),0.,1.))
         return dict(seq=self.seq,capture_s=self.stamp,aperture=c.aperture,valid=valid,intent_valid=intent_valid,state=c.state,reason=c.reason,
+                    human_closed_envelope=c.human_closed_envelope,
                     features=c.features,intent_ratio=ratio,calibration=self.calibration.summary(),
                     calibration_collecting=None if self.capture is None else self.capture['label'])
 

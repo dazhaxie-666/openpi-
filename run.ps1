@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('live', 'human-task', 'human-task-replay', 'human-task-validate', 'replay', 'grasp', 'tabletop', 'tabletop-ui', 'tabletop-check', 'fusion', 'landmark-fusion', 'fusion-replay', 'video-skill', 'check', 'test', 'python')]
+    [ValidateSet('single-arm', 'shared-grasp', 'depth-diagnose', 'live', 'human-task', 'human-task-replay', 'human-task-validate', 'replay', 'grasp', 'tabletop', 'tabletop-ui', 'tabletop-check', 'fusion', 'landmark-fusion', 'fusion-replay', 'video-skill', 'check', 'test', 'python')]
     [string]$Mode = 'fusion',
     [string]$Python,
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -39,18 +39,27 @@ if ($taskRoot -match '[^\x00-\x7F]') {
 $taskTmp = Join-Path $taskB 'outputs\runtime_tmp'
 New-Item -ItemType Directory -Force -Path $taskTmp | Out-Null
 $taskPreviousEnvironment = @{}
-foreach ($taskName in @('TEMP', 'TMP', 'PYTHONUTF8')) {
+foreach ($taskName in @('TEMP', 'TMP', 'PYTHONUTF8', 'OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS')) {
     $taskPreviousEnvironment[$taskName] = [Environment]::GetEnvironmentVariable($taskName, 'Process')
 }
 $env:TEMP = $taskTmp
 $env:TMP = $taskTmp
 $env:PYTHONUTF8 = '1'
+if (!$env:OPENBLAS_NUM_THREADS) { $env:OPENBLAS_NUM_THREADS = '1' }
+if (!$env:OMP_NUM_THREADS) { $env:OMP_NUM_THREADS = '1' }
 Write-Host "B Python: $Python"
 Push-Location -LiteralPath $taskB
 try {
     switch ($Mode) {
         'live'   { & $Python -u (Join-Path $taskB 'live_bimanual_human.py') @ScriptArgs }
         'human-task' { & $Python -u (Join-Path $taskB 'run_human_task.py') @ScriptArgs }
+        'depth-diagnose' { & $Python -u (Join-Path $taskB 'diagnose_teleop_depth.py') @ScriptArgs }
+        'single-arm' {
+            & $Python -u (Join-Path $taskB 'run_human_task.py') --control direct --mapping wrist --position-frame fixed-image --body-position-source mediapipe --depth-source palm-planar --depth-gain 1.0 --direct-wrist-policy palm --auto-grasp-assist --arms right --gripper-mode continuous --no-images --realtime --control-hz 30 --preview-hz 30 --robot-preview-hz 20 @ScriptArgs
+        }
+        'shared-grasp' {
+            & $Python -u (Join-Path $taskB 'run_human_task.py') --control direct --mapping wrist --position-frame fixed-image --body-position-source mediapipe --depth-source palm-planar --depth-gain 1.0 --direct-wrist-policy palm --shared-grasp --collect-shared-dataset --arms right --gripper-mode continuous --no-images --realtime --control-hz 30 --preview-hz 30 --robot-preview-hz 20 @ScriptArgs
+        }
         'human-task-replay' { & $Python -u (Join-Path $taskB 'replay_human_task.py') @ScriptArgs }
         'human-task-validate' { & $Python -u (Join-Path $taskB 'validate_human_task.py') @ScriptArgs }
         'replay' { & $Python -u (Join-Path $taskB 'demo_member_ab.py') @ScriptArgs }
@@ -94,7 +103,7 @@ try {
 }
 finally {
     Pop-Location
-    foreach ($taskName in @('TEMP', 'TMP', 'PYTHONUTF8')) {
+    foreach ($taskName in @('TEMP', 'TMP', 'PYTHONUTF8', 'OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS')) {
         [Environment]::SetEnvironmentVariable($taskName, $taskPreviousEnvironment[$taskName], 'Process')
     }
 }

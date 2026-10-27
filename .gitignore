@@ -22,8 +22,10 @@ _archive/
 *.pth
 *.pt
 *.onnx
+/pose2arm-main/models/rtmpose_body*/
 *.safetensors
 *.whl
+*.mjb
 *.npz
 !openarm_cloth/live_avoidance_test_cases.npz
 /pose2arm-main/videos/*

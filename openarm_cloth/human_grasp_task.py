@@ -61,8 +61,11 @@ class TaskConfig:
     goal_radius_m: float = .03
     lower: np.ndarray = field(default_factory=lambda: np.array([.32, -.18, .429]))
     upper: np.ndarray = field(default_factory=lambda: np.array([.54, .18, .69]))
+    depth_gain: float | None = None
 
     def __post_init__(self):
+        if self.depth_gain is not None and (not np.isfinite(self.depth_gain) or self.depth_gain<=0):
+            raise ValueError('depth_gain must be positive and finite')
         for name in ('gain', 'speed', 'input_loss_s', 'dwell_s', 'near_m',
                      'lift_m', 'goal_radius_m', 'max_target_lead_m'):
             if not np.isfinite(getattr(self, name)) or getattr(self, name) <= 0:
@@ -172,8 +175,20 @@ class HumanGraspTask:
         self.robot_anchor = feedback.tcp.copy()
         self.target = feedback.tcp.copy()
 
+    @property
+    def motion_gains(self):
+        return np.full(3,self.config.gain)
+
+    def motion_parameters(self):
+        return self.motion_gains,self.config.speed,self.config.max_target_lead_m
+
+    @property
+    def motion_deadband_m(self):return self.config.deadband_m
+
     def _follow(self, human, dt, actual_tcp):
-        goal = self.robot_anchor + self.config.gain * (human.point - self.human_anchor)
+        gains,speed,max_lead=self.motion_parameters()
+        goal = self.robot_anchor + gains * (human.point - self.human_anchor)
+        self.follow_workspace_clipped=(goal<self.config.lower)|(goal>self.config.upper)
         tracing=getattr(self,'record_motion_trace',False)
         unclipped=goal.copy() if tracing else None
         anchor_before=self.human_anchor.copy() if tracing else None
@@ -182,20 +197,26 @@ class HumanGraspTask:
             # Discard only unreachable displacement, independently per axis.
             # Keep the target lead and speed limits below: actuator lag is not
             # a workspace boundary and must not move the human's anchor.
-            anchor_shift=(goal-np.clip(goal,self.config.lower,self.config.upper))/self.config.gain
+            anchor_shift=(goal-np.clip(goal,self.config.lower,self.config.upper))/gains
             self.human_anchor+=anchor_shift
         goal = np.clip(goal, self.config.lower, self.config.upper)
         workspace_goal=goal.copy() if tracing else None
         lead = goal - actual_tcp
-        goal = actual_tcp + lead * min(1., self.config.max_target_lead_m / max(np.linalg.norm(lead), 1e-12))
+        lead_limited=np.linalg.norm(lead)>max_lead
+        goal = actual_tcp + lead * min(1., max_lead / max(np.linalg.norm(lead), 1e-12))
         if tracing:
             self.motion_trace=dict(human_anchor=anchor_before,workspace_anchor_shift=anchor_shift,
                 robot_anchor=self.robot_anchor.copy(),
                 unclipped_goal=unclipped,workspace_goal=workspace_goal,
                 workspace_clipped=np.abs(unclipped-workspace_goal)>1e-9,lead_goal=goal.copy())
         delta = goal - self.target
-        if np.linalg.norm(delta) > self.config.deadband_m:
-            self.target += delta * min(1., self.config.speed * dt / max(np.linalg.norm(delta), 1e-12))
+        distance=float(np.linalg.norm(delta))
+        if distance > self.motion_deadband_m:
+            # The direct path must not accumulate slow motion and release it
+            # in a deadband-sized jump. Retain the same noise margin as a
+            # continuous positional offset, with no extra temporal filter.
+            travel=distance-self.motion_deadband_m if getattr(self,'continuous_deadband',False) and not lead_limited else distance
+            self.target += delta * (min(travel,speed*dt)/max(distance,1e-12))
         return self.target.copy()
 
     def update(self, human, feedback, clock, start=False, paused=False, recenter=False):
@@ -363,17 +384,32 @@ class DirectHumanTask(HumanGraspTask):
     Tracking loss and rejected motion hold/rebase rather than end a session.
     """
     workspace_anti_windup=True
+    continuous_deadband=True
     control_mode = 'direct'
     terminal = ('success', 'failed', 'cancelled', 'finished')
+
+    @property
+    def motion_gains(self):
+        gains=super().motion_gains
+        if self.config.depth_gain is not None:gains[0]=self.config.depth_gain
+        return gains
 
     def finish(self, clock, reason='operator_finished'):
         if self.stage not in self.terminal:
             self.reason = reason
             self._enter('finished', clock, reason)
 
-    def reject_motion(self, reason, human, feedback, clock):
+    def rebase_axes(self,human,feedback,axes):
+        self.human_anchor[axes]=human.point[axes]
+        self.robot_anchor[axes]=feedback.tcp[axes]
+        self.target[axes]=feedback.tcp[axes]
+
+    def reject_motion(self, reason, human, feedback, clock,blocked_axes=None):
         if human is not None and human.valid and human.point is not None:
-            self.rebase(human, feedback)
+            axes=None if blocked_axes is None else np.asarray(blocked_axes,dtype=bool)
+            if axes is not None and axes.shape==(3,) and axes.any() and self.target is not None:
+                self.rebase_axes(human,feedback,axes)
+            else:self.rebase(human, feedback)
         else:
             self.was_missing = True
         # Log transitions, not identical warnings at camera/control frequency.

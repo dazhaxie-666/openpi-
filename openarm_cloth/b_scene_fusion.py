@@ -24,9 +24,12 @@ class BVisualObserver:
         self.chest=mujoco.Renderer(model,480,640);self.wrist=mujoco.Renderer(model,240,320)
         self.handeye={s:load_handeye(latest_handeye_report(s),s) for s in SIDES}
         self.last=None;self.attempts=[]
+        self.retain_frames=False;self.frames={}
+        self.known_cube_tracking=False;self.measurements=[];self.partial_measurements=[]
 
     def observe(self,data,clock):
-        measured=[];self.attempts=[]
+        measured=[];self.attempts=[];self.partial_measurements=[]
+        if self.retain_frames:self.frames={}
         for side in self.camera_sides:
             try:
                 if side is None:
@@ -38,8 +41,20 @@ class BVisualObserver:
                     transform=body_transform(data,self.specs[side].body_id)@handeye
                     correction=self.calibration['wrist'][side]
                 rgb,depth=render_rgb_depth(renderer,data,camera)
+                if self.retain_frames:self.frames[camera]=dict(rgb=rgb.copy(),depth=depth.copy(),time_s=float(clock))
                 observation=estimate_cube_center(rgb,depth,np.eye(4),transform,matrix,CUBE_HALF)
-                center=apply_workspace_rgbd_calibration(observation.center_world,correction)
+                partial_center=apply_workspace_rgbd_calibration(observation.center_world,correction)
+                self.partial_measurements.append(dict(center=partial_center.copy(),yaw=float(observation.yaw_world_rad),
+                    source=camera,time_s=float(clock),mask_pixels=int(observation.mask_pixels)))
+                observed_center=observation.center_world
+                if self.known_cube_tracking and observation.top_center_world is not None:
+                    # A complete square top localises the cube centre without
+                    # the visibility-dependent bias of its side-face extrema.
+                    sizes=np.asarray(observation.top_size_xy)
+                    if np.max(np.abs(sizes-2*CUBE_HALF))>.010:
+                        raise RuntimeError('cube top incomplete; do not interpret occlusion as target motion')
+                    observed_center=observation.top_center_world
+                center=apply_workspace_rgbd_calibration(observed_center,correction)
                 # All observations originate in camera pixels; no object state
                 # is used to decide which estimate agrees with the others.
                 measured.append(dict(center=np.asarray(center).copy(),yaw=float(observation.yaw_world_rad),
@@ -47,6 +62,7 @@ class BVisualObserver:
                 self.attempts.append(dict(camera=camera,detected=True))
             except RuntimeError as error:
                 self.attempts.append(dict(camera=camera,detected=False,reason=str(error)))
+        self.measurements=measured
         if measured:
             # Chest is calibrated for this whole workspace; a wrist refines it
             # only when both views agree to 15 mm. Never average contradictions.

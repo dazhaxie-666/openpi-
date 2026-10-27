@@ -16,6 +16,91 @@ from live_bimanual_stream import BimanualHumanStream
 
 
 class VisionReacquireTests(unittest.TestCase):
+    def test_single_arm_tracks_crop_audits_two_hands_and_recovers_on_loss(self):
+        from mediapipe.tasks.python import vision
+        frames=Queue();calls=[];created=[];missing=[False];crop_only=[False]
+        class Camera:
+            metadata={'synthetic_input':True}
+            def __init__(self,*args):pass
+            def read_new(self,after):
+                seq=frames.get(timeout=5)
+                if seq is None:raise EOFError()
+                return seq,seq*50_000_000,seq*50_000_000,np.zeros((180,320,3),np.uint8)
+            def close(self):frames.put(None)
+        class Detector:
+            def __init__(self,options,body=False):
+                self.body=body;self.count=0 if body else options.num_hands;created.append(self.count)
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def detect_for_video(self,image,stamp):
+                calls.append((self.count,stamp))
+                if not self.body:
+                    if missing[0] or crop_only[0] and self.count==2:return SimpleNamespace(hand_landmarks=[],hand_world_landmarks=[],handedness=[])
+                    from test_human_gripper_gestures import hand
+                    world=hand();norm=world.copy();norm[:,:2]+=[.25,.6]
+                    p=lambda h:[SimpleNamespace(x=x,y=y,z=z) for x,y,z in h]
+                    return SimpleNamespace(hand_landmarks=[p(norm)],hand_world_landmarks=[p(world)],
+                        handedness=[[SimpleNamespace(category_name='Left',score=.9)]])
+                norm=np.zeros((33,4));norm[:,3]=1.
+                norm[11,:2]=[.65,.2];norm[12,:2]=[.35,.2]
+                norm[13,:2]=[.7,.4];norm[14,:2]=[.3,.4]
+                norm[15,:2]=[.75,.6];norm[16,:2]=[.25,.6]
+                world=norm.copy();world[23,:3]=[-.1,.8,0];world[24,:3]=[.1,.8,0]
+                p=lambda h:[SimpleNamespace(x=x,y=y,z=z,visibility=v) for x,y,z,v in h]
+                return SimpleNamespace(pose_landmarks=[p(norm)],pose_world_landmarks=[p(world)])
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(vision.PoseLandmarker,'create_from_options',side_effect=lambda o:Detector(o,True)))
+            stack.enter_context(patch.object(vision.HandLandmarker,'create_from_options',side_effect=Detector))
+            # Crop output is already mapped into full-image coordinates here;
+            # the test exercises scheduling and real association/confirmation.
+            from live_bimanual_stream import full_inference
+            stack.enter_context(patch('live_bimanual_stream.roi_inference',side_effect=
+                lambda mp,d,rgb,b,t,s:(full_inference(mp,d,mp.Image(image_format=mp.ImageFormat.SRGB,data=rgb),t),0.)))
+            stream=BimanualHumanStream(camera_factory=Camera,expected_sides=('right',))
+            def consume(seq):
+                frames.put(seq);deadline=time.monotonic()+5
+                while time.monotonic()<deadline:
+                    if stream.error:self.fail(stream.error)
+                    obs=stream.snapshot()
+                    if obs is not None and obs['seq']==seq:return obs
+                    time.sleep(.002)
+                self.fail('fixture timed out')
+            try:
+                for seq in range(1,9):consume(seq)
+                self.assertEqual(created,[0,2,1])
+                self.assertTrue(stream.snapshot()['arms']['right']['hand_valid'])
+                full_stamps=[stamp for count,stamp in calls if count==2]
+                self.assertLess(len(full_stamps),8)
+                self.assertGreaterEqual(len(full_stamps),3)
+                self.assertTrue(any(count==1 for count,stamp in calls))
+                missing[0]=True
+                consume(9)
+                self.assertFalse(stream.snapshot()['arms']['right']['hand_valid'])
+                missing[0]=False
+                consume(10)
+                self.assertTrue(stream.snapshot()['hand_full_scan'])
+                self.assertFalse(stream.snapshot()['arms']['right']['hand_valid'])
+                consume(11)
+                self.assertTrue(stream.snapshot()['arms']['right']['hand_valid'])
+                # A distant hand can be invisible to the full-frame detector.
+                # After a long loss, body-guided crops must remain available.
+                missing[0]=True
+                for seq in range(12,20):consume(seq)
+                missing[0]=False;crop_only[0]=True
+                consume(20);consume(21)
+                self.assertTrue(stream.snapshot()['arms']['right']['hand_valid'])
+                crop_only[0]=False
+                # Explicit reset also discards the crop and restarts full search.
+                stream.request_reacquire();frames.put(22)
+                deadline=time.monotonic()+5
+                while len(created)<6 and time.monotonic()<deadline:time.sleep(.002)
+                consume(23)
+                self.assertEqual(stream.snapshot()['vision_generation'],1)
+                self.assertTrue(stream.snapshot()['hand_full_scan'])
+                self.assertFalse(stream.snapshot()['arms']['right']['hand_valid'])
+            finally:frames.put(None);stream.close()
+            self.assertFalse(stream.thread.is_alive())
+
     def test_inflight_old_generation_cannot_republish_after_reacquire(self):
         import mediapipe as mp
         from mediapipe.tasks.python import vision

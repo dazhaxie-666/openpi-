@@ -18,6 +18,27 @@ def body(wrist=(.7,.4),side='left'):
 
 
 class AdaptiveROI(unittest.TestCase):
+    def test_single_hand_without_history_does_not_aim_from_untrusted_elbow(self):
+        p=body(side='right');p[16,:2]=[.3,.5]
+        p[14,:2]=[.9,.9];p[14,3]=.1
+        lo,hi=stream.single_hand_roi(p,'right',1280,720)
+        self.assert_square_inside((lo,hi))
+        reference=stream.roi_bounds(p,'right',1280,720,allow_missing_elbow=True)
+        np.testing.assert_array_equal(lo,reference[0]);np.testing.assert_array_equal(hi,reference[1])
+        self.assertLess(np.linalg.norm((lo+hi)/2-p[16,:2]*[1280,720]),2.)
+        p[16,3]=.1;self.assertIsNone(stream.single_hand_roi(p,'right',1280,720))
+
+    def test_single_hand_context_scales_with_person_and_keeps_tracked_hand(self):
+        p=body(side='right');p[16,:2]=[.3,.5]
+        hand=np.zeros((21,3));hand[:,:2]=p[16,:2];hand[4,:2]+=[.08,-.08]
+        lo,hi=stream.single_hand_roi(p,'right',1280,720,hand)
+        self.assertGreaterEqual(hi[0]-lo[0],384)
+        self.assertTrue(np.all(hand[:,:2]*[1280,720]>=lo))
+        self.assertTrue(np.all(hand[:,:2]*[1280,720]<=hi))
+        p[11,0]=.55;p[12,0]=.45
+        lo,hi=stream.single_hand_roi(p,'right',1280,720,hand)
+        self.assertLess(hi[0]-lo[0],200)
+
     def assert_square_inside(self,bounds,width=1280,height=720):
         self.assertIsNotNone(bounds)
         lo,hi=bounds

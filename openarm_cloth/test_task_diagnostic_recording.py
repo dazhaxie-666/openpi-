@@ -38,6 +38,9 @@ class TaskDiagnosticRecordingTests(unittest.TestCase):
         self.assertTrue(fields['workspace_clipped'][0])
         self.assertGreater(fields['unclipped_goal'][0],fields['workspace_goal'][0])
         self.assertLessEqual(fields['command_target'][0]-tcp[0],task.config.speed*.05+1e-9)
+        held=diagnostic_fields(task,TaskCommand('hold'))
+        self.assertFalse(held['motion_trace_valid'])
+        self.assertTrue(np.isnan(held['unclipped_goal']).all())
         task.motion_trace=None
         held=diagnostic_fields(task,TaskCommand('hold'))
         self.assertFalse(held['motion_trace_valid']);self.assertTrue(np.isnan(held['command_target']).all())

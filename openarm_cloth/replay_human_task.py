@@ -11,6 +11,7 @@ import numpy as np
 
 from member_b_actuators import ActuatorController
 from validate_human_task import validate
+from single_arm_runtime import recorded_step_durations
 
 
 def replay(path, execution='states', check=False):
@@ -30,6 +31,7 @@ def replay(path, execution='states', check=False):
         states = blob['physics_state'].copy()
         qpos, qvel, actions = blob['qpos'].copy(), blob['qvel'].copy(), blob['action_target'].copy()
         applied_ctrl = blob['ctrl'].copy()
+        durations=recorded_step_durations(blob,manifest,len(states)).copy()
     if len(states) < 2:
         raise ValueError('At least two frames are needed to verify replay')
     mujoco.mj_setState(model, data, states[0], state_spec)
@@ -38,8 +40,8 @@ def replay(path, execution='states', check=False):
     # Restore the recorded integration state after reconstructing those fields.
     mujoco.mj_setState(model, data, states[0], state_spec)
     control = ActuatorController(model, data)
-    steps = round(1 / manifest['control_hz'] / model.opt.timestep)
-    if abs(steps * model.opt.timestep - 1 / manifest['control_hz']) > 1e-9:
+    steps=np.rint(durations/model.opt.timestep).astype(int)
+    if not np.allclose(steps*model.opt.timestep,durations,atol=1e-9,rtol=0):
         raise ValueError('Control interval does not match model physics')
     flags = dict(paused=False, quit=False)
     def key(code):
@@ -74,7 +76,7 @@ def replay(path, execution='states', check=False):
                 action = actions[index]
                 control.set_targets(dict(left=action[:7], right=action[9:16]),
                                     dict(left=float(action[7]), right=float(action[16])))
-                for substep in range(steps):
+                for substep in range(steps[index]):
                     if index == 0 and substep == 0:
                         # The first command was computed with B's preceding-step
                         # gravity cache. Recomputing it after mj_forward changes
@@ -86,7 +88,7 @@ def replay(path, execution='states', check=False):
             compared += 1
             if viewer is not None:
                 viewer.sync()
-                time.sleep(1 / manifest['control_hz'])
+                time.sleep(float(durations[index]))
     complete = compared == len(states)
     return dict(verdict='PASS' if complete and max_qpos < 1e-5 and max_qvel < 1e-4 else 'FAIL' if complete else 'CANCELLED',
                 execution=execution, frames=compared, max_qpos_error=max_qpos, max_qvel_error=max_qvel,

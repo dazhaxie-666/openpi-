@@ -66,17 +66,23 @@ def _assign_side(himg_wrist, handedness_label, pose_frame):
     return 1 if handedness_label == "Left" else 0
 
 
-def extract_hands_from_video(video_path, pose_norm=None, delegate="cpu"):
+def extract_hands_from_video(video_path, pose_norm=None, delegate="cpu",
+                             expected_sides=SIDES):
     """逐帧手部关键点提取（VIDEO 模式，与 extract_pose 同帧时钟）。
 
     pose_norm: extract_from_video()["pose"]，(T,33,4) normalized 坐标，
                用于左右手腕部关联（推荐传入; None 时回退 handedness）。
+    expected_sides: 单臂任务传 ('right',)。画面只有一只手时直接归到该侧，
+               避免 Pose 腕点漂移把已检出的手丢掉；默认保持双手关联。
     返回 dict:
       hand_world   (T, 2, 21, 3)  world landmarks（米，原点=手部几何中心）
       hand_img     (T, 2, 21, 2)  normalized image 坐标
       hand_present (T, 2) bool    列 [0]=left [1]=right
       fps          float
     """
+    expected=(expected_sides,) if isinstance(expected_sides,str) else tuple(expected_sides)
+    if not expected or any(s not in SIDES for s in expected):
+        raise ValueError('expected_sides must be a non-empty subset of left/right')
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise FileNotFoundError(f"could not open video: {video_path}")
@@ -105,7 +111,10 @@ def extract_hands_from_video(video_path, pose_norm=None, delegate="cpu"):
 
             wrists = [[lms[WRIST].x,lms[WRIST].y] for lms in res.hand_landmarks]
             labels = [h[0].category_name if h else "" for h in res.handedness]
-            assignments = associate_hands(wrists,labels,pose_frame,previous_wrist)
+            if len(expected)==1 and len(wrists)==1 and np.isfinite(wrists[0]).all():
+                assignments=[SIDES.index(expected[0])]
+            else:
+                assignments = associate_hands(wrists,labels,pose_frame,previous_wrist)
             for k,side in enumerate(assignments):
                 if side is None:
                     continue
