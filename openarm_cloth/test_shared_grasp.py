@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from human_grasp_task import HumanInput,Feedback
 from shared_grasp import SharedGraspTask
+from b_scene_fusion import wrist_target_visibility
 from test_automatic_grasp import observation
 
 
@@ -149,16 +150,21 @@ class SharedTaskTests(unittest.TestCase):
         np.testing.assert_array_equal(cmd.target[:2],self.fb.tcp[:2])
         self.fb.command_stage='reacquire';self.fb.reached=self.fb.opened=True
         self.fb.visual=dict(center=np.array([.43,0,.429]),yaw=0.,time_s=self.i*.05,
-            source='chest_d435i_preview')
+            source='chest_d435i_preview',wrist_visible=False)
         for _ in range(6):self.tick(1.2)
         self.assertEqual(self.task.phase,'restore_view')
-        self.fb.visual['source']='chest/wrist_agreement';self.fb.visual['time_s']=self.i*.05
+        self.fb.visual['wrist_visible']=True;self.fb.visual['time_s']=self.i*.05
         restored=None
         for _ in range(4):
             cmd=self.tick(1.2)
             if cmd.owner=='human_view_restored':restored=cmd
         self.assertEqual(self.task.phase,'manual');self.assertIsNotNone(restored)
         self.assertEqual(self.task.trial_id,0)
+
+    def test_edge_clipped_wrist_cube_still_counts_as_visible(self):
+        rgb=np.zeros((240,320,3),dtype=np.uint8);rgb[:24,120:180,0]=255
+        visible,pixels=wrist_target_visibility(rgb)
+        self.assertTrue(visible);self.assertGreaterEqual(pixels,64)
 
     def test_no_target_or_expired_camera_geometry_cannot_authorise_blind_retreat(self):
         self.fb.visual=None;self.task.last_target=None

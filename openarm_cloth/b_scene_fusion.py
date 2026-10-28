@@ -13,6 +13,13 @@ from calibration_simulation import body_transform,render_rgb_depth
 from handeye_grasp_red_cube import estimate_cube_center,load_handeye,latest_handeye_report
 from demo_grasp_viewer import (load_chest_calibration,load_workspace_rgbd_calibration,
                                apply_workspace_rgbd_calibration,CUBE_HALF)
+from workspace_camera import red_mask
+
+
+def wrist_target_visibility(rgb,min_pixels=64):
+    """Raw wrist-image visibility; deliberately permits an edge-clipped cube."""
+    pixels=int(np.count_nonzero(red_mask(rgb)))
+    return pixels>=int(min_pixels),pixels
 
 
 class BVisualObserver:
@@ -29,6 +36,7 @@ class BVisualObserver:
 
     def observe(self,data,clock):
         measured=[];self.attempts=[];self.partial_measurements=[]
+        wrist_visible=False;wrist_mask_pixels=0
         if self.retain_frames:self.frames={}
         for side in self.camera_sides:
             try:
@@ -42,6 +50,9 @@ class BVisualObserver:
                     correction=self.calibration['wrist'][side]
                 rgb,depth=render_rgb_depth(renderer,data,camera)
                 if self.retain_frames:self.frames[camera]=dict(rgb=rgb.copy(),depth=depth.copy(),time_s=float(clock))
+                if side is not None:
+                    visible,pixels=wrist_target_visibility(rgb)
+                    wrist_mask_pixels=max(wrist_mask_pixels,pixels);wrist_visible=wrist_visible or visible
                 observation=estimate_cube_center(rgb,depth,np.eye(4),transform,matrix,CUBE_HALF)
                 partial_center=apply_workspace_rgbd_calibration(observation.center_world,correction)
                 self.partial_measurements.append(dict(center=partial_center.copy(),yaw=float(observation.yaw_world_rad),
@@ -70,6 +81,13 @@ class BVisualObserver:
             compatible=[m for m in measured[1:] if np.linalg.norm(m['center']-selected['center'])<.015]
             if compatible:
                 selected=dict(compatible[0]);selected['source']='chest/wrist_agreement' if measured[0]['source'].startswith('chest') else selected['source']
+            else:selected=dict(selected)
+            # A wrist frame may contain enough red-cube pixels to prove that
+            # the target is back in view while its top face is still partial.
+            # Preserve that visibility fact separately from the complete 3-D
+            # pose, which can continue to come from the chest camera.
+            selected['wrist_visible']=wrist_visible
+            selected['wrist_mask_pixels']=wrist_mask_pixels
             self.last=selected
         return self.last
 

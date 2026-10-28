@@ -108,9 +108,10 @@ class SharedGraspTask(DirectHumanTask):
         visual=feedback.visual
         source='' if visual is None else str(visual.get('source',''))
         collection_mode=self.trial_limit>0 or self.automatic_scene_reset
+        wrist_visible=(visual is not None and bool(visual.get('wrist_visible',False)))
         fresh=(visual is not None and not visual.get('pose_is_prior',False)
             and visual['time_s']>=self.phase_since
-            and (not collection_mode or source.startswith('v22_') or 'wrist' in source))
+            and (not collection_mode or wrist_visible or source.startswith('v22_') or 'wrist' in source))
         if self._stable(fresh,clock,.10):
             self.enter('manual',clock,'View restored: human wrist control resumes; pinch in range')
             self.was_missing=True;self.view_loss_reference=None
