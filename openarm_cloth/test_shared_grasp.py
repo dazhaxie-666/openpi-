@@ -139,6 +139,27 @@ class SharedTaskTests(unittest.TestCase):
         for _ in range(4):cmd=self.tick(None,valid=False)
         self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trial_id,0)
 
+    def test_collection_human_view_recovery_requires_wrist_camera(self):
+        self.task.trial_limit=5
+        self.fb.tcp=np.array([.435,.005,.438]);self.tick(1.2)
+        self.fb.visual=None;self.i+=1
+        cmd=self.task.update(HumanInput(self.i,np.array([0.,0.,.04]),1.2,True,self.i*.05),self.fb,self.i*.05)
+        self.assertEqual(self.task.phase,'restore_view')
+        self.assertEqual((cmd.stage,cmd.owner),('reacquire','human_restore_view'))
+        np.testing.assert_array_equal(cmd.target[:2],self.fb.tcp[:2])
+        self.fb.command_stage='reacquire';self.fb.reached=self.fb.opened=True
+        self.fb.visual=dict(center=np.array([.43,0,.429]),yaw=0.,time_s=self.i*.05,
+            source='chest_d435i_preview')
+        for _ in range(6):self.tick(1.2)
+        self.assertEqual(self.task.phase,'restore_view')
+        self.fb.visual['source']='chest/wrist_agreement';self.fb.visual['time_s']=self.i*.05
+        restored=None
+        for _ in range(4):
+            cmd=self.tick(1.2)
+            if cmd.owner=='human_view_restored':restored=cmd
+        self.assertEqual(self.task.phase,'manual');self.assertIsNotNone(restored)
+        self.assertEqual(self.task.trial_id,0)
+
     def test_no_target_or_expired_camera_geometry_cannot_authorise_blind_retreat(self):
         self.fb.visual=None;self.task.last_target=None
         for _ in range(6):cmd=self.tick(.1)
