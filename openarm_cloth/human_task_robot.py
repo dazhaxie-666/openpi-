@@ -109,6 +109,7 @@ class HumanTaskRobot:
         self.motion_origin = None
         self.motion_progress = 0.
         self.motion_duration = 0.
+        self.ready_tcp=np.array([.43,0.,.54])
 
     def initialize(self):
         """Episode reset posture only, before input/recording; no object is moved.
@@ -119,7 +120,9 @@ class HumanTaskRobot:
         # Start above the cube rather than above the goal zone. The old
         # y=-.10 start forced the operator to spend most of the relative wrist
         # travel just reaching the cube, and made the workspace clip early.
-        ik = PadCartesianIK(self.model, self.data, ready=np.array([.43, 0., .54]))
+        ready=np.asarray(self.ready_tcp,float)
+        if ready.shape!=(3,) or not np.isfinite(ready).all():raise ValueError('ready TCP must be a finite XYZ vector')
+        ik = PadCartesianIK(self.model, self.data, ready=ready)
         self.data.qpos[self.spec.qpos] = ik.ready_q
         self.data.qvel[:] = 0.
         mujoco.mj_forward(self.model, self.data)
@@ -133,7 +136,7 @@ class HumanTaskRobot:
             self.direct_rotation_target=Rotation.from_euler('z',30,degrees=True).as_matrix()@self.rotation
             state=self.ik_query;state.qpos[:]=self.model.qpos0
             state.qpos[self.robot_addresses]=self.data.qpos[self.robot_addresses]
-            q=self._direct_position_goal(np.array([.43,0.,.54]),state,bounded=True)
+            q=self._direct_position_goal(ready,state,bounded=True)
             self.data.qpos[self.spec.qpos]=q;self.data.qvel[:]=0.
             mujoco.mj_forward(self.model,self.data);self.joints[self.side]=q.copy()
             self.rotation=self.data.geom_xmat[self.geoms[0]].reshape(3,3).copy()
@@ -142,6 +145,38 @@ class HumanTaskRobot:
         for _ in range(round(.6 / self.model.opt.timestep)):
             self.control.apply()
             mujoco.mj_step(self.model, self.data)
+
+    def capture_collection_reset_state(self):
+        """Capture the post-initialisation simulator state used between trials."""
+        return dict(qpos=self.data.qpos.copy(),act=self.data.act.copy(),ctrl=self.data.ctrl.copy(),
+                    ready_tcp=np.asarray(self.ready_tcp).copy())
+
+    def restore_collection_reset_state(self,state):
+        """Reset the simulator between labelled trials; never called mid-trial."""
+        if np.shape(state.get('qpos'))!=(self.model.nq,):raise ValueError('invalid collection reset qpos')
+        simulation_time=float(self.data.time)
+        self.data.qpos[:]=state['qpos'];self.data.qvel[:]=0.
+        if self.model.na:self.data.act[:]=state['act']
+        self.data.ctrl[:]=state['ctrl'];self.data.qacc_warmstart[:]=0.
+        self.data.time=simulation_time
+        mujoco.mj_forward(self.model,self.data)
+        self.joints={s:self.data.qpos[spec.qpos].copy() for s,spec in self.control.specs.items()}
+        self.finger_targets={s:.044 for s in self.joints}
+        self.control.set_targets(self.joints,self.finger_targets)
+        self.attached=False;self.attachment=self.attachment_rotation=None
+        if hasattr(self,'reset_shared_plan'):self.reset_shared_plan()
+        self.visual=self.plan=None;self.command_stage='';self.goal_q=self.goal_xyz=None
+        self.error=self.warning=None;self.ik_diagnostic={};self.direct_ik_mode='fixed_wrist'
+        self.rotation=self.data.geom_xmat[self.geoms[0]].reshape(3,3).copy()
+        if self.direct_wrist_policy=='palm':self.direct_rotation_target=self.rotation.copy()
+        self.clear_view_visual=self.pregrasp_visual=self.contact_visual=self.release_visual=None
+        self.release_query_active=False;self.release_query_until=0.;self.pressure_releasing=False
+        self.finger_encoder_sample=None;self.finger_encoder_velocity=np.zeros(2)
+        self.contact_scene_near=False;self.contact_query_center=np.full(3,np.nan)
+        self.contact_query_rotation=np.full((3,3),np.nan);self.contact_diagnostics={}
+        self.reference_trajectories.clear();self.motion_origin=None;self.motion_progress=0.;self.motion_duration=0.
+        self.observer.last=None;self.observer.attempts=[];self.observer.measurements=[]
+        self.observer.partial_measurements=[];self.observer.frames={}
 
     def observe(self, clock):
         self.observer.observe(self.data, clock)

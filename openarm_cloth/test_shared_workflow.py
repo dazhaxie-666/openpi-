@@ -94,5 +94,13 @@ class SharedSegmentTests(unittest.TestCase):
         self.assertFalse(self.task.trials[0]['includes_human_approach'])
         self.assertFalse(self.task.trials[0]['complete_task_segment'])
 
+    def test_reset_and_final_notice_rows_do_not_create_a_phantom_trial(self):
+        self.step();self.step('plan',request=True);self.step('verify')
+        self.step('manual',end='completed')
+        self.step('reset');self.step('reset');self.step('session_complete')
+        self.segments.finalize(self.task,self.rows)
+        self.assertEqual(len(self.task.trials),1)
+        self.assertEqual(self.task.trials[0]['status'],'completed')
+
 
 if __name__=='__main__':unittest.main()

@@ -22,7 +22,9 @@ class SharedEpisodeSegments:
         active=bool(task.trials and 'end_s' not in task.trials[-1])
         new_request=bool(task.trials and task.trial_id not in self.requests)
         new_end=bool(task.trials and 'end_s' in task.trials[-1] and task.trials[-1]['trial_id'] not in self.ends)
-        if task.stage=='direct' and self.approach is None and not new_end and (not active or new_request):
+        collection_boundary=task.phase in ('reset','session_complete')
+        if (task.stage=='direct' and not collection_boundary and self.approach is None
+                and not new_end and (not active or new_request)):
             self.approach=dict(start_frame=index,start_s=float(clock));began=True
             self.episode_id=task.trial_id if new_request else task.trial_id+1
         if new_request:

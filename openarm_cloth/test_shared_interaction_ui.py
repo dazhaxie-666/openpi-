@@ -67,5 +67,27 @@ class SharedInteractionUITests(unittest.TestCase):
         self.assertGreater(canvas[555,25,1],canvas[555,25,2])
         self.assertGreater(np.std(canvas[548:636,16:944]),10.)
 
+    def test_dataset_trial_prompts_show_boundaries_and_reset_countdown(self):
+        self.task.trial_limit=10
+        self.task.inter_trial_reset_s=8.
+        self.task.stage='ready'
+        cue=shared_interaction_hint(self.task,self.feedback,1.)
+        self.assertEqual(cue['code'],'start');self.assertIn('10 段',cue['title'])
+        self.task.stage='direct';self.task.phase='manual'
+        cue=shared_interaction_hint(self.task,self.feedback,1.)
+        self.assertEqual(cue['code'],'grasp_ready');self.assertIn('第 1/10 段准备',cue['title'])
+        self.task.trial_id=1;self.task.phase='reset';self.task.reset_until=9.
+        self.task.last_trial_result=dict(status='completed',reason='placement observed')
+        cue=shared_interaction_hint(self.task,self.feedback,3.)
+        self.assertEqual(cue['code'],'trial_reset');self.assertIn('第 1/10 段已结束',cue['title'])
+        self.assertIn('6.0 秒',cue['detail'])
+
+    def test_final_trial_notice_is_visible_before_collection_exits(self):
+        self.task.trial_limit=10;self.task.trial_id=10;self.task.stage='direct'
+        self.task.phase='session_complete';self.task.final_notice_until=12.
+        cue=shared_interaction_hint(self.task,self.feedback,11.)
+        self.assertEqual(cue['code'],'session_complete')
+        self.assertIn('第 10/10 段已结束',cue['title'])
+
 
 if __name__=='__main__':unittest.main()

@@ -310,7 +310,7 @@ def show_task_result(report, model, data):
         cv2.destroyWindow(window)
 
 
-def run(args):
+def run(args, dataset_capture=None):
     if args.check and not (args.video or args.scripted_check):
         raise ValueError('--check requires --video or --scripted-check; live input uses visible windows')
     if args.scripted_check and not args.check:
@@ -333,6 +333,8 @@ def run(args):
     if shared and (not direct or use_a or args.video):raise ValueError('shared grasp requires direct single-arm wrist input')
     collect_shared=bool(getattr(args,'collect_shared_dataset',False))
     if collect_shared and not shared:raise ValueError('shared dataset collection requires --shared-grasp')
+    if dataset_capture is not None and not collect_shared:
+        raise ValueError('dataset capture extension requires shared dataset collection')
     if collect_shared:args.no_images=True
     shared_writer=None
     shared_segments=SharedEpisodeSegments() if shared else None
@@ -381,12 +383,15 @@ def run(args):
                         close_ratio=args.close_ratio, open_ratio=args.open_ratio,
                         lower=np.array([.32, -.18, TABLE_TOP + CONFIG['cube_half_size_m']]))
     task = SharedGraspTask(config) if shared else AutomaticPrecisionTask(config) if auto_assist else DirectHumanTask(config) if direct else HumanGraspTask(config)
+    if dataset_capture is not None:
+        dataset_capture.configure_task(task)
     if auto_assist:task.visual_alignment_enabled=bool(getattr(args,'visual_grasp_align',True))
     auto_gripper=AutomaticGripper() if auto_assist else None
     task.record_motion_trace=diagnostic or direct and not use_a
     output = args.output or ROOT / 'outputs' / ('shared_grasp' if shared else 'human_task') / datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    if dataset_capture is not None:dataset_capture.initialize_output(output)
     source_kind = 'synthetic_software_fixture' if args.scripted_check else 'measured_video' if args.video else 'live_usb'
     metadata = dict(schema='openarm_human_task_v1', source=source_kind, simulation_only=True,
                     human_validation_performed=False, training_performed=False,
@@ -396,7 +401,7 @@ def run(args):
                     gripper_hold_controls='L toggle current aperture; H lock half open; direct wrist only; default continuous',
                     automatic_grasp_assistance=auto_assist,
                     shared_grasp_workflow=shared,
-                    shared_interaction_version=6 if shared else None,
+                    shared_interaction_version=7 if shared else None,
                     shared_segment_schema='full_task_v2' if shared else None,
                     shared_human_follow_scope='fixed image body wrist; continuously associated measured hand bridges shoulder loss; >0.35s hand gap needs body; no predicted landmarks' if shared else None,
                     shared_gestures='natural OPEN during approach is remembered without preparation dwell; new in-range both 2D/3D PINCH held >=0.20s requests grasp; hidden/low target never starts automatic rise; OPEN held 0.7s cancels before lift; fresh post-handoff OPEN held 0.35s places, no repeat pinch' if shared else None,
@@ -434,7 +439,8 @@ def run(args):
                     physics_catchup_limit_s=.1 if wall_physics else None,
                     timeout_policy='advisory_only; Q ends continuous practice' if direct else 'terminal',
                     clocks='active wall time' if not args.check else 'simulation control ticks (offline test)',
-                    startup='B pad IK fixed reset posture before episode; all episode execution dynamic',
+                    startup=('collection-only fixed standby TCP plus automatic simulator reset between labelled trials; reset rows excluded from trial segments'
+                             if dataset_capture is not None else 'B pad IK fixed reset posture before episode; all episode execution dynamic'),
                     source_timing=('video continuous' if direct else 'video pauses during assisted phases') if args.video else source_kind,
                     action_layout='left joint7+finger2,right joint7+finger2; absolute radians/metres',
                     alignment='images and qpos/action_target sampled before the same physical step',
@@ -519,11 +525,16 @@ def run(args):
         # Initial fixture only, before camera input. Never used by task planning.
         place_cube_for_blind_test(model, data, args.cube_test_pose)
         robot = (SharedGraspRobot if shared else HumanTaskRobot)(model, data, lift_m=config.lift_m)
+        if dataset_capture is not None:dataset_capture.configure_robot(robot)
         robot.direct_wrist_policy=wrist_policy
         robot.initialize()
+        if dataset_capture is not None:dataset_capture.bind_runtime(robot)
         if collect_shared:
             from shared_dataset import SharedFrameWriter
-            robot.observer.retain_frames=True;shared_writer=SharedFrameWriter(output)
+            robot.observer.retain_frames=True
+            shared_writer=(SharedFrameWriter(output) if dataset_capture is None
+                           else dataset_capture.create_writer(output))
+            if dataset_capture is not None:metadata['dataset_capture']=dataset_capture.describe()
             handeye,wrist_matrix=robot.observer.handeye['right']
             metadata['shared_camera_calibration']=dict(
                 chest=dict(matrix=robot.observer.chest_matrix.tolist(),world_from_camera_cv=robot.observer.chest_transform.tolist()),
@@ -609,7 +620,7 @@ def run(args):
                   if direct else 'ASSISTED: move to cube, PINCH and HOLD; after lift move over GREEN goal, then OPEN.', flush=True)
             print(('SPACE or click START: a visible wrist starts direct control; fingers are optional.' if direct else
                    'Open hand for 0.2 s, then SPACE or click START.')+
-                  ' C recenter; R pauses and restarts vision; SPACE resumes; M mirror; Q exit.', flush=True)
+                  ' C only recenters the human-to-robot mapping; R pauses and restarts vision; SPACE resumes; M mirror; Q exit.', flush=True)
             if direct:
                 print('PERSONAL GRIPPER calibration: '+str(args.calibration.resolve())+
                       ' | G pinch / O spread x10 each; hold 1.2s; READY means valid endpoints, Q saves.',flush=True)
@@ -725,6 +736,15 @@ def run(args):
                 command = task.update(human, feedback, clock,
                                       start=flags['start'] or args.check or source is not None,
                                       paused=flags['paused'], recenter=flags['recenter'] or image_recenter)
+                scene_reset_this_row=False
+                if dataset_capture is not None and dataset_capture.reset_scene_if_due(task,robot,clock):
+                    scene_reset_this_row=True;next_vision=-np.inf
+                    if image_wrist is not None:image_wrist=FrontalImageWrist()
+                    if shared_wrist is not None:shared_wrist=SharedWristContinuity()
+                    if depth_tracker is not None:
+                        depth_tracker=RelativePalmDepth(depth_tracker.sensitivity,solver=depth_tracker.solver)
+                    if palm_yaw is not None:palm_yaw=DirectPalmYaw()
+                    feedback=robot.feedback(clock);task.context=None
                 if shared:
                     if shared_segments.update(task,rows,clock):evaluator=TaskEvaluator(model,data,config)
                     if task.trials and 'end_s' in task.trials[-1] and 'physics' not in task.trials[-1]:
@@ -841,6 +861,8 @@ def run(args):
                            shared_carry_pose_fallback=np.asarray(shared and robot.ik_diagnostic.get('carry_bounded_attitude_fallback',False)),
                            shared_place_pose_fallback=np.asarray(shared and robot.ik_diagnostic.get('place_bounded_attitude_fallback',False)),
                            shared_place_blocked=np.asarray(shared and task.placement_blocked_origin is not None),
+                           shared_scene_reset=np.asarray(bool(shared and scene_reset_this_row)),
+                           shared_scene_reset_count=np.asarray(task.scene_reset_count if shared else 0),
                            shared_human_unclipped_goal=(np.asarray(task.motion_trace['unclipped_goal']).copy()
                                if shared and task.motion_trace is not None else np.full(3,np.nan)),
                            precision_scale=np.asarray(task.precision_scale if auto_assist else 1.),
@@ -962,10 +984,13 @@ def run(args):
                 phase,prompt=diagnostic_phase(None if task.started is None else clock-task.started,diagnostic_protocol)
                 row['diagnostic_phase']=np.asarray(phase if diagnostic else 'disabled')
                 image_start=time.perf_counter()
-                if shared_writer is not None and observe_ms>0:
+                if shared_writer is not None and (dataset_capture is not None or observe_ms>0):
                     from shared_dataset import saved_control_index
                     saved_index=saved_control_index(rows,task.stage)
-                    if saved_index is not None:shared_writer.submit(saved_index,robot.observer.frames)
+                    if saved_index is not None:
+                        frames=(robot.observer.frames if dataset_capture is None else
+                                dataset_capture.collect_frames(robot,clock,observed=observe_ms>0))
+                        shared_writer.submit(saved_index,frames)
                 if render is not None:
                     for camera in metadata['cameras']:
                         render.update_scene(data, camera=camera)
@@ -1046,7 +1071,8 @@ def run(args):
                             if np.isfinite(task.object_error).all():
                                 lines.append('CUBE OFFSET XYZ mm: '+', '.join(f'{v*1000:+.0f}' for v in task.object_error))
                         if shared:
-                            owner=('HUMAN APPROACH' if task.phase=='manual' else 'HUMAN UPWARD CONTROL' if task.phase=='restore_view' else 'HUMAN CARRY' if task.phase=='transport'
+                            owner=('SCENE RESET' if task.phase=='reset' else 'COLLECTION COMPLETE' if task.phase=='session_complete'
+                                else 'HUMAN APPROACH' if task.phase=='manual' else 'HUMAN UPWARD CONTROL' if task.phase=='restore_view' else 'HUMAN CARRY' if task.phase=='transport'
                                 else 'ROBOT PLACE' if task.phase in ('lower','release','retract','verify') else 'ROBOT GRASP')
                             lines.append(f'CONTROL: {owner} | {task.phase.upper()} | EPISODE {shared_segments.episode_id}')
                             lines.append('PINCH IN RANGE to grasp | OPEN 0.7s cancel before lift | OPEN 0.35s place')
@@ -1131,6 +1157,8 @@ def run(args):
                     print(f'TASK {task.stage} | source {human.seq} | {task.message}', flush=True)
                 row['control_work_ms']=np.asarray((time.perf_counter()-tick)*1000)
                 index += 1
+                if dataset_capture is not None and dataset_capture.should_stop(task,clock):
+                    flags['quit']=True
                 if not args.check:
                     time.sleep(max(0., control_interval - (time.perf_counter() - tick)))
             if task.stage not in task.terminal:
@@ -1243,7 +1271,7 @@ def run(args):
     return 0 if report['verdict'] in ('PASS', 'CANCELLED', 'INCOMPLETE') else 1
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--camera', type=int, default=0)
     parser.add_argument('--pose-model', choices=('lite', 'full', 'heavy'), default='full')
@@ -1304,7 +1332,11 @@ def main():
                         help='Mirror preview only; detection, anatomical identity and raw recordings stay unchanged. M toggles.')
     parser.add_argument('--close-on-finish', action='store_true',
                         help='Close GUI immediately on success/failure; default keeps a frozen result viewer open')
-    raise SystemExit(run(parser.parse_args()))
+    return parser
+
+
+def main():
+    raise SystemExit(run(build_parser().parse_args()))
 
 
 if __name__ == '__main__':

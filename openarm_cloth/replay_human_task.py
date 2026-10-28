@@ -31,6 +31,8 @@ def replay(path, execution='states', check=False):
         states = blob['physics_state'].copy()
         qpos, qvel, actions = blob['qpos'].copy(), blob['qvel'].copy(), blob['action_target'].copy()
         applied_ctrl = blob['ctrl'].copy()
+        scene_resets=(blob['shared_scene_reset'].astype(bool).copy()
+                      if 'shared_scene_reset' in blob.files else np.zeros(len(states),dtype=bool))
         durations=recorded_step_durations(blob,manifest,len(states)).copy()
     if len(states) < 2:
         raise ValueError('At least two frames are needed to verify replay')
@@ -71,6 +73,13 @@ def replay(path, execution='states', check=False):
                 max_qpos = max(max_qpos, float(np.max(np.abs(data.qpos - qpos[index]))))
                 max_qvel = max(max_qvel, float(np.max(np.abs(data.qvel - qvel[index]))))
             else:
+                if scene_resets[index]:
+                    # A collection reset is an environment boundary, not an
+                    # actuator action. Restore its recorded initial state,
+                    # then continue physical actuator replay within the trial.
+                    mujoco.mj_setState(model,data,state,state_spec);mujoco.mj_forward(model,data)
+                    mujoco.mj_setState(model,data,state,state_spec)
+                    control=ActuatorController(model,data)
                 max_qpos = max(max_qpos, float(np.max(np.abs(data.qpos - qpos[index]))))
                 max_qvel = max(max_qvel, float(np.max(np.abs(data.qvel - qvel[index]))))
                 action = actions[index]
@@ -93,8 +102,9 @@ def replay(path, execution='states', check=False):
     return dict(verdict='PASS' if complete and max_qpos < 1e-5 and max_qvel < 1e-4 else 'FAIL' if complete else 'CANCELLED',
                 execution=execution, frames=compared, max_qpos_error=max_qpos, max_qvel_error=max_qvel,
                 physical_actuator_replay=execution == 'actions',
+                environment_resets_applied=int(np.count_nonzero(scene_resets)) if execution=='actions' else 0,
                 synthetic_input=manifest['synthetic_input'], human_validation_performed=False,
-                scope='same-model local replay consistency; not a new human test or cross-machine determinism guarantee')
+                scope='same-model local replay consistency; recorded environment resets delimit actuator-replayed trials; not a new human test or cross-machine determinism guarantee')
 
 
 def main():

@@ -36,6 +36,11 @@ class SharedGraspTask(DirectHumanTask):
         self.request_ratio=None;self.request_seq=-1;self.request_stamp=None
         self.request_open_since=self.request_close_since=None;self.request_close_count=0
         self.view_robot_origin=self.view_hand_origin=None;self.view_limit_z=None
+        # Collection extensions may enable explicit, protected attempt boundaries.
+        # Defaults preserve the normal continuous shared-grasp workflow.
+        self.trial_limit=0;self.inter_trial_reset_s=0.;self.final_trial_notice_s=0.
+        self.reset_until=None;self.final_notice_until=None;self.last_trial_result=None
+        self.automatic_scene_reset=False;self.scene_reset_pending=False;self.scene_reset_count=0
 
     def surface_clearance(self,tcp,visual):
         """TCP reference to the observed known cube's surface, not its centre."""
@@ -155,11 +160,36 @@ class SharedGraspTask(DirectHumanTask):
         return bool(self.open_since is not None and self.open_stamp-self.open_since>=duration-1e-9)
 
     def end_trial(self,clock,status,reason):
+        ended=False
         if self.trials and 'end_s' not in self.trials[-1]:
             self.trials[-1].update(end_s=float(clock),status=status,reason=reason)
+            ended=True
+        if ended:
+            self.last_trial_result=dict(status=status,reason=reason)
+            completed=sum('end_s' in trial for trial in self.trials)
+            if self.trial_limit and completed>=self.trial_limit and self.final_trial_notice_s>0:
+                self.final_notice_until=float(clock)+self.final_trial_notice_s
+                self.reset_until=None;self.scene_reset_pending=False
+            elif self.inter_trial_reset_s>0 or self.automatic_scene_reset:
+                self.reset_until=float(clock)+self.inter_trial_reset_s
+                self.scene_reset_pending=bool(self.automatic_scene_reset)
         self.intent_latched=False;self.grasp_confirmed=False;self.rearm=False
         self.reset_grasp_entry()
         self.placement_blocked_origin=None
+
+    def scene_reset_completed(self,clock,count):
+        """Forget pre-reset perception/intent while retaining trial history."""
+        self.scene_reset_pending=False;self.scene_reset_count=int(count)
+        self.last_target=self.reacquire_target=self.object_anchor=None
+        self.release_target=self.placement_blocked_origin=None
+        self.last_visible_human_point=self.view_loss_reference=None
+        self.view_robot_origin=self.view_hand_origin=self.view_limit_z=None
+        self.was_missing=True;self.missing_since=None
+        self.open_since=self.open_stamp=None;self.open_seq=-1
+        self.request_ratio=None;self.request_seq=-1;self.request_stamp=None
+        self.reset_grasp_entry()
+        self.events.append(dict(time_s=float(clock),previous=self.stage,stage=self.stage,
+            reason='collection_scene_reset',trial_id=self.trial_id,reset_count=self.scene_reset_count))
 
     def reject_motion(self,reason,human,feedback,clock,blocked_axes=None):
         if self.phase=='manual':return super().reject_motion(reason,human,feedback,clock,blocked_axes)
@@ -199,6 +229,20 @@ class SharedGraspTask(DirectHumanTask):
         if human is not None and np.isfinite(human.capture_s):
             self.input_seq=human.seq;self.input_capture=human.capture_s
         if self.stage in self.terminal:return TaskCommand('hold',finger=0. if self.grasp_confirmed else .044)
+        if self.final_notice_until is not None:
+            if self.phase!='session_complete':
+                self.enter('session_complete',clock,'Final trial recorded; saving collection')
+            self.message='Final trial recorded; saving collection'
+            return TaskCommand('hold',finger=.044,owner='shared_collection_complete')
+        if self.reset_until is not None:
+            if clock<self.reset_until:
+                if self.phase!='reset':self.enter('reset',clock,'Trial recorded; protected operator reset time')
+                self.message=f'RESET TIME: {max(0.,self.reset_until-clock):.1f}s before the next trial can start'
+                self.reset_grasp_entry();self.open_since=None
+                return TaskCommand('hold',finger=.044,owner='shared_inter_trial_reset')
+            self.reset_until=None;self.was_missing=True
+            self.enter('manual',clock,'Reset complete; approach the cube with an open hand, then pinch to start')
+            return TaskCommand('hold',finger=.044,owner='shared_inter_trial_ready')
         if self.phase=='manual':
             if self.stage=='direct' and feedback.visual is None:
                 if not np.isfinite(clock) or self.last_clock is not None and clock<self.last_clock:raise ValueError('Task clock must be finite and monotonic')

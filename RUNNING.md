@@ -26,6 +26,27 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 & .\run.ps1 -Mode check -ScriptArgs '--check-models'
 ```
 
+## 数据集采集与自动分段
+
+仓库内 `dataset/` 是共享抓放示教的统一采集入口。从仓库根目录运行：
+
+```powershell
+& .\dataset\dataset.ps1 -Mode Check
+& .\dataset\dataset.ps1 -Mode Camera -Camera 0
+& .\dataset\dataset.ps1 -Mode Test
+& .\dataset\dataset.ps1 -Mode Smoke -Trials 2 -ResetSeconds 2
+```
+
+真人正式采集前先做三段隔离试采：
+
+```powershell
+& .\dataset\dataset.ps1 -Mode Pilot -Camera 0 -Trials 3 -ResetSeconds 8 -Seconds 0 -Batch 1
+```
+
+每段结束后，除最后一段外，机械臂和方块会自动回到 session 初始状态；界面随后显示受保护的操作者重置倒计时。复位行带有独立标记，不进入任一训练试次，动作回放会在相同边界恢复环境。`C` 只重新对齐人手到机械臂的相对映射，不是场景复位键。抓牢后必须把方块移到绿色目标区上方再张手释放。
+
+原始数据、日志、报告、个人标定和导出文件由 `dataset/.gitignore` 保持在本机。完整操作、审核与训练准入规则见 [dataset/README_CN.md](dataset/README_CN.md)。
+
 ## 单臂实时遥操（当前优先）
 
 2026-10-27 抓取任务优先使用共享模式：

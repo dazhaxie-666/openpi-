@@ -28,6 +28,30 @@ class SharedTaskTests(unittest.TestCase):
         self.request();self.assertEqual(self.task.trial_id,1)
         self.assertTrue(self.task.intent_latched)
 
+    def test_collection_reset_gate_blocks_next_trial_until_countdown_finishes(self):
+        self.task.trial_limit=2;self.task.inter_trial_reset_s=.5;self.task.final_trial_notice_s=.2
+        self.task.automatic_scene_reset=True
+        self.request();ended_at=self.i*.05
+        self.task.end_trial(ended_at,'failed','fixture attempt ended')
+        self.assertTrue(self.task.scene_reset_pending)
+        self.task.scene_reset_completed(ended_at,1)
+        self.assertFalse(self.task.scene_reset_pending);self.assertEqual(self.task.scene_reset_count,1)
+        for _ in range(5):
+            command=self.tick(.1)
+            self.assertEqual(command.owner,'shared_inter_trial_reset')
+            self.assertEqual(self.task.trial_id,1)
+        while self.i*.05<=ended_at+.5:self.tick(.1)
+        self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trial_id,1)
+
+    def test_final_trial_holds_a_visible_completion_notice(self):
+        self.task.trial_limit=1;self.task.inter_trial_reset_s=.5;self.task.final_trial_notice_s=.2
+        self.request();ended_at=self.i*.05
+        self.task.end_trial(ended_at,'completed','fixture placement observed')
+        command=self.tick(1.2)
+        self.assertEqual(command.owner,'shared_collection_complete')
+        self.assertEqual(self.task.phase,'session_complete')
+        self.assertAlmostEqual(self.task.final_notice_until,ended_at+.2)
+
     def test_missing_hand_after_request_does_not_deadlock_approach_or_close(self):
         self.request();self.task.hand_intent_valid=False;self.fb.plan_ready=True
         self.tick(None,valid=False)
@@ -267,6 +291,18 @@ class SharedBoundaryTests(unittest.TestCase):
         for i in range(5):robot.execute(TaskCommand('hold',finger=0.),i*.05)
         np.testing.assert_array_equal(robot.joints['right'],expected)
         self.assertEqual(robot.finger_targets['right'],0.)
+
+    def test_collection_scene_reset_restores_robot_and_cube_without_rewinding_time(self):
+        robot,data=self.robot(shared=True)
+        snapshot=robot.capture_collection_reset_state();expected=snapshot['qpos'].copy()
+        before_time=float(data.time);data.qpos[:]+=0.01;data.qvel[:]=1.
+        robot.attached=True;robot.plan={'fixture':True};robot.visual={'fixture':True}
+        robot.restore_collection_reset_state(snapshot)
+        np.testing.assert_allclose(data.qpos,expected,atol=0,rtol=0)
+        np.testing.assert_array_equal(data.qvel,np.zeros_like(data.qvel))
+        self.assertEqual(data.time,before_time);self.assertFalse(robot.attached)
+        self.assertIsNone(robot.plan);self.assertIsNone(robot.visual)
+        self.assertTrue(all(value==.044 for value in robot.finger_targets.values()))
 
     def test_failed_carry_preserves_previous_checked_target_and_clears_fallback_mode(self):
         from unittest.mock import patch

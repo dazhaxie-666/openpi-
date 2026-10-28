@@ -98,6 +98,8 @@ class SharedGraspRobot(HumanTaskRobot):
         self.reacquire_origin=None
         self.reacquire_owner=None
         self.shared_retract_target=None
+        self.shared_last_clear_time=None;self.shared_last_full_visual=None
+        self.shared_carry_query=False;self.shared_place_query=False
 
     def feedback(self,clock):
         result=super().feedback(clock)

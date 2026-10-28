@@ -1,5 +1,8 @@
 # OpenArm / Pose2Arm A+B 主项目
 
+2026-10-28 GitHub 更新：新增仓库内 `dataset/` 采集工作区，以及按段提示、受保护的重置倒计时、机械臂与方块自动复位、复位边界回放和训练数据审核流程。
+运行命令和验证范围见[本次数据采集更新说明](docs/github_publish_20261028.md)。
+
 2026-10-27 GitHub 更新：仓库内可用 `start_shared_grasp.ps1` 启动当前共享抓取。
 新电脑配置、发布范围及验证见[本次更新说明](docs/github_publish_20261027.md)。
 
