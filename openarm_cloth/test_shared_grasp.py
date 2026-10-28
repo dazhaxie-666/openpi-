@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from human_grasp_task import HumanInput,Feedback
 from shared_grasp import SharedGraspTask
-from b_scene_fusion import wrist_target_visibility
+from b_scene_fusion import wrist_target_visibility,wrist_visibility_prior
 from test_automatic_grasp import observation
 
 
@@ -171,6 +171,16 @@ class SharedTaskTests(unittest.TestCase):
         rgb=np.zeros((240,320,3),dtype=np.uint8);rgb[:24,120:180,0]=255
         visible,pixels=wrist_target_visibility(rgb)
         self.assertTrue(visible);self.assertGreaterEqual(pixels,64)
+
+    def test_wrist_pixels_keep_manual_control_but_never_authorize_grasp_from_prior(self):
+        measured=dict(center=np.array([.43,0,.429]),yaw=0.,time_s=.1,source='chest_d435i_preview')
+        prior=wrist_visibility_prior(measured,1.,True,2000)
+        self.assertTrue(prior['pose_is_prior']);self.assertEqual(prior['prior_time_s'],.1)
+        self.task.trial_limit=5;self.fb.visual=prior;self.fb.tcp[2]=.49
+        for _ in range(6):self.tick(1.2)
+        for _ in range(8):cmd=self.tick(.1)
+        self.assertEqual(self.task.phase,'manual');self.assertEqual(cmd.stage,'direct')
+        self.assertEqual(self.task.trial_id,0)
 
     def test_no_target_or_expired_camera_geometry_cannot_authorise_blind_retreat(self):
         self.fb.visual=None;self.task.last_target=None

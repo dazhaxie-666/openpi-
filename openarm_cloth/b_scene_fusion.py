@@ -22,6 +22,16 @@ def wrist_target_visibility(rgb,min_pixels=64):
     return pixels>=int(min_pixels),pixels
 
 
+def wrist_visibility_prior(last,clock,visible,mask_pixels):
+    """Current pixel visibility plus the last measured pose; never a grasp pose."""
+    if not visible or last is None:return None
+    prior=dict(last)
+    measured_time=float(prior.get('prior_time_s',prior['time_s']))
+    prior.update(source='wrist_visibility_prior',time_s=float(clock),pose_is_prior=True,
+        prior_time_s=measured_time,wrist_visible=True,wrist_mask_pixels=int(mask_pixels))
+    return prior
+
+
 class BVisualObserver:
     def __init__(self,model,specs,camera_sides=(None,'left','right')):
         self.model=model;self.specs=specs
@@ -89,7 +99,9 @@ class BVisualObserver:
             selected['wrist_visible']=wrist_visible
             selected['wrist_mask_pixels']=wrist_mask_pixels
             self.last=selected
-        return self.last
+            return self.last
+        prior=wrist_visibility_prior(self.last,clock,wrist_visible,wrist_mask_pixels)
+        return prior if prior is not None else self.last
 
     def close(self): self.chest.close();self.wrist.close()
 
