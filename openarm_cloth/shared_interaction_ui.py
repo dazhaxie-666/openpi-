@@ -30,8 +30,8 @@ def shared_interaction_hint(task,feedback,clock,paused=False):
     if task.phase=='manual':
         status=task.grasp_readiness(feedback,clock)
         prefix=(f'第 {next_trial}/{trial_limit} 段准备：' if trial_limit else '')
-        if not status['fresh']:return cue('target_hidden',prefix+'方块暂不可见：向上移手，机械臂随手抬起','TARGET HIDDEN - HAND CONTROLS UPWARD MOTION',
-            '手移动多少就跟随多少；视野恢复后，进入范围直接捏合抓取')
+        if not status['fresh']:return cue('target_hidden',prefix+'方块暂不可见：仍可用右手自由控制机械臂','TARGET HIDDEN - FULL WRIST CONTROL',
+            '可前后、左右、上下移动；夹爪保持张开，不会盲抓；重新看到方块后再捏合')
         distance=status['distance_m']*1000
         if not status['in_range']:return cue('approach',prefix+'继续移动右手，靠近方块','MOVE WRIST CLOSER',f'距方块表面约 {distance:.0f} 毫米；接近门限 75 毫米')
         if not status['height_clear']:return cue('raise_for_grasp',prefix+'请向上移手一点，留出抓取空间','MOVE HAND UP FOR GRASP CLEARANCE')

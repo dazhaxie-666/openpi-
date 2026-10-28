@@ -42,6 +42,10 @@ class TaskCommand:
     joint_targets: dict | None = None
     finger_targets: dict | None = None
     reference_capture_s: float | None = None
+    # Camera geometry accepted by the task on this same control tick.  Shared
+    # planning/collision checks may consume this immutable snapshot without
+    # racing the next camera observation.
+    visual_snapshot: dict | None = None
 
 
 @dataclass

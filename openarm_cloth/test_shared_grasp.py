@@ -22,12 +22,18 @@ class SharedTaskTests(unittest.TestCase):
     def request(self):
         self.fb.tcp[2]=.49  # human has approached; home is outside assistance radius
         for _ in range(6):self.tick(1.2)
-        for _ in range(6):cmd=self.tick()
-        self.assertEqual(self.task.phase,'plan');return cmd
+        accepted=None
+        for _ in range(6):
+            cmd=self.tick()
+            if cmd.visual_snapshot is not None:accepted=cmd
+        self.assertEqual(self.task.phase,'plan');return accepted or cmd
 
     def test_near_pinch_requests_planning_without_millimetre_alignment(self):
-        self.request();self.assertEqual(self.task.trial_id,1)
+        command=self.request();self.assertEqual(self.task.trial_id,1)
         self.assertTrue(self.task.intent_latched)
+        self.assertIsNotNone(command.visual_snapshot)
+        np.testing.assert_array_equal(command.visual_snapshot['center'],self.fb.visual['center'])
+        self.assertIsNot(command.visual_snapshot,self.fb.visual)
 
     def test_collection_reset_gate_blocks_next_trial_until_countdown_finishes(self):
         self.task.trial_limit=2;self.task.inter_trial_reset_s=.5;self.task.final_trial_notice_s=.2
@@ -129,42 +135,29 @@ class SharedTaskTests(unittest.TestCase):
         self.fb.visual=None
         for _ in range(6):cmd=self.tick(.1)
         self.assertEqual(self.task.phase,'manual')
-        self.assertEqual(cmd.stage,'hold');self.assertEqual(cmd.finger,.044)
+        self.assertEqual(cmd.stage,'direct');self.assertEqual(cmd.finger,.044)
         self.assertFalse(self.task.intent_latched);self.assertEqual(self.task.trial_id,0)
 
-    def test_human_view_recovery_requires_new_full_pose_and_returns_without_grasping(self):
-        self.test_missing_object_view_accepts_only_observed_upward_escape_without_grasp()
-        self.task.hand_intent_valid=False
-        self.fb.visual=dict(center=np.array([.44,.01,.429]),time_s=self.i*.05)
-        self.tick(None,valid=False)
-        self.assertEqual(self.task.phase,'restore_view')
-        self.fb.command_stage='reacquire';self.fb.reached=self.fb.opened=True
-        self.fb.visual['pose_is_prior']=True
-        for _ in range(6):self.tick(None,valid=False)
-        self.assertEqual(self.task.phase,'restore_view')
+    def test_hidden_target_and_prior_keep_manual_control_but_cannot_start_a_grasp(self):
+        self.test_missing_view_keeps_full_manual_motion_with_open_jaws_and_collision_prior()
+        self.fb.visual=dict(center=np.array([.44,.01,.429]),time_s=self.i*.05,pose_is_prior=True)
+        for _ in range(6):cmd=self.tick(.1)
+        self.assertEqual((self.task.phase,cmd.stage,self.task.trial_id),('manual','direct',0))
         self.fb.visual['pose_is_prior']=False;self.fb.visual['time_s']=self.i*.05
-        for _ in range(4):cmd=self.tick(None,valid=False)
+        for _ in range(4):cmd=self.tick(1.2)
         self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trial_id,0)
 
-    def test_collection_human_view_recovery_requires_wrist_camera(self):
+    def test_collection_target_dropout_never_leaves_manual_control_or_creates_a_trial(self):
         self.task.trial_limit=5
         self.fb.tcp=np.array([.435,.005,.438]);self.tick(1.2)
         self.fb.visual=None;self.i+=1
         cmd=self.task.update(HumanInput(self.i,np.array([0.,0.,.04]),1.2,True,self.i*.05),self.fb,self.i*.05)
-        self.assertEqual(self.task.phase,'restore_view')
-        self.assertEqual((cmd.stage,cmd.owner),('reacquire','human_restore_view'))
-        np.testing.assert_array_equal(cmd.target[:2],self.fb.tcp[:2])
-        self.fb.command_stage='reacquire';self.fb.reached=self.fb.opened=True
+        self.assertEqual(self.task.phase,'manual')
+        self.assertEqual((cmd.stage,cmd.owner),('direct','human_target_hidden'))
         self.fb.visual=dict(center=np.array([.43,0,.429]),yaw=0.,time_s=self.i*.05,
             source='chest_d435i_preview',wrist_visible=False)
-        for _ in range(6):self.tick(1.2)
-        self.assertEqual(self.task.phase,'restore_view')
-        self.fb.visual['wrist_visible']=True;self.fb.visual['time_s']=self.i*.05
-        restored=None
-        for _ in range(4):
-            cmd=self.tick(1.2)
-            if cmd.owner=='human_view_restored':restored=cmd
-        self.assertEqual(self.task.phase,'manual');self.assertIsNotNone(restored)
+        for _ in range(6):cmd=self.tick(1.2)
+        self.assertEqual((self.task.phase,cmd.stage),('manual','direct'))
         self.assertEqual(self.task.trial_id,0)
 
     def test_edge_clipped_wrist_cube_still_counts_as_visible(self):
@@ -190,10 +183,10 @@ class SharedTaskTests(unittest.TestCase):
         for _ in range(6):self.tick(.1)
         self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trial_id,0)
 
-    def test_open_hand_during_human_view_recovery_does_not_create_or_cancel_a_trial(self):
-        self.test_missing_object_view_accepts_only_observed_upward_escape_without_grasp()
+    def test_open_hand_during_target_dropout_does_not_create_or_cancel_a_trial(self):
+        self.test_missing_view_keeps_full_manual_motion_with_open_jaws_and_collision_prior()
         for _ in range(16):self.tick(1.2)
-        self.assertEqual(self.task.phase,'restore_view');self.assertEqual(self.task.trials,[])
+        self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trials,[])
         self.assertFalse(self.task.intent_latched)
 
     def test_repeated_source_frame_cannot_confirm_a_request(self):
@@ -226,28 +219,30 @@ class SharedTaskTests(unittest.TestCase):
         for _ in range(6):cmd=self.tick(.1)
         self.assertEqual(self.task.phase,'plan');self.assertTrue(self.task.intent_latched)
 
-    def test_missing_object_view_accepts_only_observed_upward_escape_without_grasp(self):
+    def test_missing_object_view_keeps_human_control_without_authorising_grasp(self):
         self.fb.tcp=np.array([.435,.005,.438]);self.tick(1.2)
         self.fb.visual=None
         self.i+=1
         cmd=self.task.update(HumanInput(self.i,np.array([0.,0.,.04]),1.2,True,self.i*.05),self.fb,self.i*.05)
-        self.assertEqual(self.task.phase,'restore_view');self.assertEqual(cmd.stage,'reacquire')
-        self.assertEqual(cmd.owner,'human_restore_view');self.assertEqual(cmd.finger,.044)
+        self.assertEqual(self.task.phase,'manual');self.assertEqual(cmd.stage,'direct')
+        self.assertEqual(cmd.owner,'human_target_hidden');self.assertEqual(cmd.finger,.044)
         self.assertFalse(self.task.intent_latched);self.assertEqual(self.task.trial_id,0)
-        np.testing.assert_array_equal(cmd.target[:2],self.fb.tcp[:2])
 
-    def test_missing_view_does_not_authorise_lateral_approach(self):
+    def test_missing_view_keeps_full_manual_motion_with_open_jaws_and_collision_prior(self):
         self.fb.tcp=np.array([.435,.005,.438]);self.tick(1.2)
         self.fb.visual=None;self.i+=1
-        cmd=self.task.update(HumanInput(self.i,np.array([0.,.04,0.]),1.2,True,self.i*.05),self.fb,self.i*.05)
-        self.assertEqual(cmd.stage,'hold');self.assertEqual(self.task.phase,'manual')
+        self.task.update(HumanInput(self.i,np.array([0.,.04,0.]),1.2,True,self.i*.05),self.fb,self.i*.05,recenter=True)
+        self.i+=1
+        cmd=self.task.update(HumanInput(self.i,np.array([0.,.06,0.]),1.2,True,self.i*.05),self.fb,self.i*.05)
+        self.assertEqual((cmd.stage,cmd.owner,cmd.finger),('direct','human_target_hidden',.044))
+        self.assertEqual(self.task.phase,'manual');self.assertGreater(cmd.target[1],self.fb.tcp[1])
+        self.assertTrue(cmd.visual_snapshot['pose_is_prior'])
 
-    def test_view_recovery_returns_to_manual_without_creating_a_grasp_trial(self):
-        self.test_missing_object_view_accepts_only_observed_upward_escape_without_grasp()
+    def test_new_camera_pose_after_dropout_stays_manual_without_creating_a_grasp_trial(self):
+        self.test_missing_object_view_keeps_human_control_without_authorising_grasp()
         for _ in range(10):self.tick(1.2)
-        self.assertEqual(self.task.phase,'restore_view')
+        self.assertEqual(self.task.phase,'manual')
         self.fb.visual=dict(center=np.array([.43,0,.429]),yaw=0.,time_s=self.i*.05)
-        self.fb.command_stage='reacquire';self.fb.reached=self.fb.opened=True
         for _ in range(5):cmd=self.tick(1.2)
         self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trial_id,0)
         self.assertFalse(self.task.intent_latched)
@@ -479,6 +474,43 @@ class SharedBoundaryTests(unittest.TestCase):
         self.assertEqual(robot.command_stage,'plan')
         self.assertNotIn(robot.object_address,submit.call_args.args[3])
         robot.reset_shared_plan();self.assertIsNone(robot.shared_future);self.assertTrue(pending.cancelled())
+
+    def test_plan_uses_the_accepted_command_snapshot_when_next_camera_frame_is_missing(self):
+        from concurrent.futures import Future
+        from unittest.mock import patch
+        from human_grasp_task import TaskCommand
+        robot,data=self.robot(shared=True);robot.visual=None;pending=Future()
+        accepted=dict(center=np.array([.43,0.,.429]),yaw=.2,time_s=1.,source='wrist_rgbd')
+        with patch.object(robot.shared_executor,'submit',return_value=pending) as submit:
+            robot.execute(TaskCommand('plan',finger=.044,visual_snapshot=accepted),1.)
+        self.assertIsNone(robot.warning);self.assertIs(robot.shared_future,pending)
+        submitted=submit.call_args.args[-1]
+        np.testing.assert_array_equal(submitted['center'],accepted['center'])
+        self.assertIsNot(submitted,accepted)
+
+    def test_hidden_target_manual_motion_uses_prior_only_for_collision_geometry(self):
+        from human_grasp_task import TaskCommand
+        robot,data=self.robot(shared=True);accepted=dict(robot.visual,pose_is_prior=True,prior_time_s=0.)
+        robot.shared_last_full_visual=dict(robot.visual);robot.visual=None
+        tcp=robot.feedback(1.).tcp
+        robot.execute(TaskCommand('direct',tcp+[0.,.003,0.],.044,'human_target_hidden',
+            visual_snapshot=accepted),1.)
+        self.assertNotIn('camera_target_missing',robot.warning or '')
+        self.assertIsNone(robot.visual)
+
+    def test_locked_plan_is_not_cancelled_only_because_the_next_camera_frame_is_missing(self):
+        from unittest.mock import patch
+        from human_grasp_task import TaskCommand
+        from human_task_robot import HumanTaskRobot
+        robot,data=self.robot(shared=True);accepted=dict(robot.visual)
+        robot.shared_plan_visual=dict(accepted);robot.shared_plan_locked=True
+        robot.plan=dict(center=accepted['center'].copy(),yaw=accepted['yaw'])
+        robot.visual=None;seen=[]
+        def inspect(command,clock,dt):seen.append(dict(robot.fresh_visual(clock)))
+        with patch.object(HumanTaskRobot,'execute',side_effect=inspect):
+            robot.execute(TaskCommand('approach',finger=.044),1.)
+        self.assertEqual(seen[0]['source'],'locked_shared_plan_execution')
+        self.assertIsNone(robot.visual)
 
     def test_restore_view_cannot_request_horizontal_motion_or_skip_collision_check(self):
         from unittest.mock import patch

@@ -67,14 +67,18 @@ class ManualViewIntentTests(unittest.TestCase):
         for _ in range(6):self.tick(.15)
         self.assertEqual(self.task.phase,'plan')
 
-    def test_hidden_view_upward_goal_matches_measured_hand_not_fixed_seven_cm(self):
+    def test_hidden_view_keeps_full_measured_hand_control_not_fixed_recovery_motion(self):
         self.fb.tcp=np.array([.435,.005,.438]);self.tick(1.2)
         self.fb.visual=None
-        cmd=self.tick(1.2,point=np.array([0.,0.,.04]))
-        self.assertEqual(cmd.stage,'reacquire');self.assertFalse(self.task.intent_latched)
-        self.assertAlmostEqual(cmd.target[2]-self.fb.tcp[2],.04*self.task.motion_gains[2])
-        target=cmd.target.copy()
-        for _ in range(10):cmd=self.tick(1.2,point=np.array([0.,0.,.04]))
+        self.tick(1.2,point=np.zeros(3),recenter=True)
+        cmd=self.tick(1.2,point=np.array([.02,.03,.04]))
+        self.assertEqual((cmd.stage,cmd.owner),('direct','human_target_hidden'))
+        self.assertFalse(self.task.intent_latched);self.assertEqual(cmd.finger,.044)
+        self.assertTrue(np.all(cmd.target>self.fb.tcp))
+        first=cmd.target.copy()
+        for _ in range(10):cmd=self.tick(1.2,point=np.array([.02,.03,.04]))
+        self.assertTrue(np.all(cmd.target>first));target=cmd.target.copy()
+        cmd=self.tick(1.2,point=np.array([.02,.03,.04]))
         np.testing.assert_allclose(cmd.target,target)
         cmd=self.tick(None,valid=False)
         self.assertEqual(cmd.stage,'hold');self.assertEqual(cmd.finger,.044)
@@ -85,7 +89,7 @@ class ManualViewIntentTests(unittest.TestCase):
         self.fb.visual=None
         for _ in range(8):cmd=self.tick(.15)
         self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trial_id,0)
-        self.assertEqual(cmd.stage,'hold')
+        self.assertEqual((cmd.stage,cmd.finger),('direct',.044))
 
     def test_missing_frames_and_pause_discard_grasp_confirmation(self):
         self.fb.tcp[2]=.49

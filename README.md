@@ -8,8 +8,8 @@
 2026-10-27 GitHub 更新：仓库内可用 `start_shared_grasp.ps1` 启动当前共享抓取。
 新电脑配置、发布范围及验证见[本次更新说明](docs/github_publish_20261027.md)。
 
-最新交互：遮挡上抬由人手位移控制，取消固定高度自动上升；自然张手靠近，进入范围直接捏合抓取，无需额外张手准备。
-操作与证据见[手动上抬与抓取防误触](openarm_cloth/docs/manual_view_pinch_20261027_CN.md)。
+最新交互：方块姿态短暂缺失时仍保留人手 XYZ 全方向控制，夹爪保持张开且禁止盲抓；新捏合冻结同帧 RGB-D 快照，下一帧缺失不再吞掉一段。
+操作与证据见[遮挡全手动控制与原子抓取快照](openarm_cloth/docs/manual_full_control_plan_snapshot_20261028_CN.md)。
 
 最新放置修复：下降允许有限腕姿调整；不可达时恢复人工搬运并提示换位置，避免持续张手原地重试。
 实测定位、代码与论文采用范围见[张手放置优化](openarm_cloth/docs/placement_release_research_20261027_CN.md)。

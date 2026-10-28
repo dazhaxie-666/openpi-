@@ -254,21 +254,26 @@ class SharedGraspTask(DirectHumanTask):
         if self.phase=='manual':
             if self.stage=='direct' and feedback.visual is None:
                 if not np.isfinite(clock) or self.last_clock is not None and clock<self.last_clock:raise ValueError('Task clock must be finite and monotonic')
-                self.last_clock=clock;command=TaskCommand('hold',finger=.044)
+                previous_clock=self.last_clock;self.last_clock=clock
+                dt=.05 if previous_clock is None else min(.1,clock-previous_clock)
+                command=TaskCommand('hold',finger=.044)
                 valid=human is not None and human.valid and human.point is not None and np.isfinite(human.point).all()
                 if valid:
-                    if self.view_loss_reference is None:self.view_loss_reference=self.last_visible_human_point
-                    if recenter or self.was_missing or self.missing_since is not None and clock-self.missing_since>=.35:
-                        self.view_loss_reference=np.asarray(human.point).copy();self.was_missing=False
+                    if self.missing_since is not None and clock-self.missing_since>=.35:self.was_missing=True
                     self.missing_since=None
                     prior=self.last_target
                     recent=prior is not None and 0<=clock-prior['time_s']<=30.
-                    retreat=self.view_loss_reference is not None and (human.point[2]-self.view_loss_reference[2])*self.motion_gains[2]>.002
-                    if (not paused and retreat and recent and np.linalg.norm(feedback.tcp-prior['center'])<.15):
-                        self.view_robot_origin=feedback.tcp.copy();self.view_hand_origin=np.asarray(self.view_loss_reference).copy()
-                        self.view_limit_z=min(self.config.upper[2],feedback.tcp[2]+.070)
-                        self.enter('restore_view',clock,'Human-controlled upward motion; no fixed automatic retreat')
-                        return self.human_view_command(human,feedback,clock)
+                    if not paused and recent:
+                        if recenter or self.was_missing or self.human_anchor is None or self.robot_anchor is None or self.target is None:
+                            self.rebase(human,feedback);self.was_missing=False
+                        collision_prior=dict(prior,center=np.asarray(prior['center']).copy(),
+                            pose_is_prior=True,prior_time_s=prior['time_s'],source='manual_collision_prior')
+                        command=TaskCommand('direct',self._follow(human,dt,feedback.tcp),.044,
+                            'human_target_hidden',visual_snapshot=collision_prior)
+                        self.message='TARGET HIDDEN: full human wrist control remains active; jaws stay open; no blind grasp'
+                    else:
+                        self.was_missing=True
+                        self.message='Target geometry unavailable: holding open jaws until one camera pose is acquired'
                 else:
                     if self.missing_since is None:self.missing_since=clock
                     if clock-self.missing_since>=.35:self.was_missing=True
@@ -323,8 +328,9 @@ class SharedGraspTask(DirectHumanTask):
                 self.reset_grasp_entry()
                 self.intent_latched=True;self.object_anchor=np.asarray(target['center']).copy()
                 self.enter('plan',clock,'New in-range pinch confirmed by 2D/3D hand input: planning')
-                return TaskCommand('plan',finger=.044,owner='shared_rgbd_plan')
-            if visual is None:self.message='Target occluded: move hand UP; open jaws follow your measured upward movement'
+                snapshot=dict(target,center=np.asarray(target['center']).copy())
+                return TaskCommand('plan',finger=.044,owner='shared_rgbd_plan',visual_snapshot=snapshot)
+            if visual is None:self.message='Target occluded: full human wrist control remains active; jaws stay open until a fresh pose'
             else:self.message='HUMAN APPROACH: wrist follow; near cube new PINCH requests precision grasp'
             return command
         if self.phase=='restore_view':return self.human_view_command(human,feedback,clock,recenter)
@@ -343,7 +349,8 @@ class SharedGraspTask(DirectHumanTask):
                         return TaskCommand('hold',finger=.044,owner='human_view_restored')
                     self.object_anchor=np.asarray(visual['center']).copy()
                     self.enter('plan',clock,'View restored: planning from NEW robot RGB-D pose')
-                    return TaskCommand('plan',finger=.044,owner='shared_rgbd_plan')
+                    snapshot=dict(visual,center=np.asarray(visual['center']).copy())
+                    return TaskCommand('plan',finger=.044,owner='shared_rgbd_plan',visual_snapshot=snapshot)
             if clock-self.phase_since>6.:
                 if self.phase=='restore_view':
                     self.enter('manual',clock,'view recovery timed out; no blind grasp')

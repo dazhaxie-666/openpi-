@@ -222,7 +222,7 @@ raw\openarm_pickplace_p02_core100_v1\batch_003\<时间_session>\
 & 'D:\openpi\dataset\dataset.ps1' -Mode Pilot -Trials 3 -Seconds 300
 ```
 
-`Trials` 是尝试数，不是成功数。非最后一段结束后，机械臂与方块会自动回到该 session 的初始状态；随后进入受保护的操作者重置时间，默认 3 秒，试采与正式采集一致。界面会显示段号、开始、完成和重置倒计时，倒计时结束前不会触发下一段。可用 `-ResetSeconds` 调整时长：
+`Trials` 是尝试数，不是成功数。一次尝试从新鲜 RGB-D 姿态下确认的新捏合开始；该请求帧现在会原子冻结给规划器，下一相机帧的瞬时缺失不会再生成“还没抓取就结束”的空失败段。非最后一段结束后，机械臂与方块会自动回到该 session 的初始状态；随后进入受保护的操作者重置时间，默认 3 秒，试采与正式采集一致。界面会显示段号、开始、完成和重置倒计时，倒计时结束前不会触发下一段。可用 `-ResetSeconds` 调整时长：
 
 ```powershell
 & 'D:\openpi\dataset\dataset.ps1' -Mode Pilot -Task Hold -Trials 3 -ResetSeconds 3 -Seconds 0

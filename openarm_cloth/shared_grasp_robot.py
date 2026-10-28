@@ -42,7 +42,7 @@ class SharedGraspRobot(HumanTaskRobot):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
         self.shared_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix='B-camera-grasp')
-        self.shared_future=None;self.shared_plan_locked=False
+        self.shared_future=None;self.shared_plan_locked=False;self.shared_plan_visual=None
         self.shared_planning_s=0.;self.shared_plan_started=None
         self.observer.known_cube_tracking=True
         self.observer.retain_frames=True
@@ -92,7 +92,7 @@ class SharedGraspRobot(HumanTaskRobot):
     def reset_shared_plan(self):
         if self.attached:return
         if self.shared_future is not None:self.shared_future.cancel()
-        self.shared_future=None;self.shared_plan_locked=False;self.plan=None
+        self.shared_future=None;self.shared_plan_locked=False;self.shared_plan_visual=None;self.plan=None
         self.shared_touch_conditioned=False
         self.contact_visual=None;self.pregrasp_visual=None;self.release_visual=None
         self.reacquire_origin=None
@@ -205,7 +205,16 @@ class SharedGraspRobot(HumanTaskRobot):
             self.warning=self.error=None;self.ik_diagnostic={}
             self.execution_timing=dict(ik_ms=0.,collision_check_ms=0.,planning_query_ms=0.,payload_ms=0.)
             if self.plan is not None and self.shared_plan_locked:return
-            visual=self.fresh_visual(clock)
+            visual=self.shared_plan_visual
+            if visual is None:
+                candidate=command.visual_snapshot if command.visual_snapshot is not None else self.fresh_visual(clock)
+                if (candidate is not None and not candidate.get('pose_is_prior',False)
+                        and np.asarray(candidate.get('center',[])).shape==(3,)
+                        and np.isfinite(candidate['center']).all()
+                        and np.isfinite(candidate.get('time_s',np.nan))
+                        and 0<=clock-candidate['time_s']<=.5):
+                    visual=dict(candidate,center=np.asarray(candidate['center']).copy())
+                    self.shared_plan_visual=visual
             if visual is None:
                 self.warning='camera_target_missing_at_shared_plan';return
             if self.shared_future is None:
@@ -218,7 +227,9 @@ class SharedGraspRobot(HumanTaskRobot):
             if self.shared_future.done():
                 try:
                     plan,rotation,log=self.shared_future.result()
-                    if np.linalg.norm(plan['center']-visual['center'])>.015:
+                    current=self.fresh_visual(clock)
+                    if (current is not None and not current.get('pose_is_prior',False)
+                            and np.linalg.norm(plan['center']-current['center'])>.015):
                         raise RuntimeError('camera_target_moved_during_shared_plan')
                     self.plan=plan;self.rotation=rotation;self.shared_plan_locked=True
                     self.plan['camera_time_s']=visual['time_s'];self.shared_touch_conditioned=False
@@ -268,8 +279,29 @@ class SharedGraspRobot(HumanTaskRobot):
         last_safe_joints={side:q.copy() for side,q in self.joints.items()} if self.attached else None
         last_safe_fingers=dict(self.finger_targets) if self.attached else None
         self.shared_carry_query=command.stage=='transport' and self.attached
+        injected_visual=None;visual_was_injected=False
+        if (command.stage=='direct' and command.owner=='human_target_hidden'
+                and self.fresh_visual(clock) is None and command.visual_snapshot is not None):
+            snapshot=command.visual_snapshot
+            if (snapshot.get('pose_is_prior',False) and np.asarray(snapshot.get('center',[])).shape==(3,)
+                    and np.isfinite(snapshot['center']).all()):
+                injected_visual=self.visual
+                self.visual=dict(snapshot,center=np.asarray(snapshot['center']).copy(),time_s=float(clock))
+                visual_was_injected=True
+        elif (command.stage in ('transit','approach','descend','close') and self.shared_plan_locked
+                and self.plan is not None and self.fresh_visual(clock) is None and self.shared_plan_visual is not None):
+            # Planning froze both encoders and RGB-D before any autonomous
+            # motion.  A missing *next* frame must not invalidate that accepted
+            # transaction.  A newer full observation still wins and the base
+            # executor rejects it if the object moved.
+            injected_visual=self.visual
+            self.visual=dict(self.shared_plan_visual,center=np.asarray(self.plan['center']).copy(),
+                time_s=float(clock),pose_is_prior=True,source='locked_shared_plan_execution')
+            visual_was_injected=True
         try:super().execute(command,clock,dt)
-        finally:self.shared_carry_query=False
+        finally:
+            if visual_was_injected:self.visual=injected_visual
+            self.shared_carry_query=False
         if self.error is not None and self.error.startswith(('task_motion_collision_rejected:',
                 'camera_target_', 'camera_grasp_', 'cartesian_target_unreachable:')):
             self.warning=self.error;self.error=None
