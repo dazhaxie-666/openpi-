@@ -131,6 +131,7 @@ def audit_recording(session, settings, validate_fn=None):
     reports = []
     synthetic = bool(manifest.get('synthetic_input', True))
     training_allowed = bool(collection.get('training_allowed', False))
+    task_profile = collection.get('task_profile', 'pickplace')
     reviews_path = session / 'review.json'
     reviews = json.loads(reviews_path.read_text(encoding='utf-8')) if reviews_path.exists() else {}
     for trial in trials:
@@ -162,7 +163,7 @@ def audit_recording(session, settings, validate_fn=None):
         evaluation = rows.get('evaluation_next')
         if evaluation is not None and np.isfinite(evaluation[start, :2]).all():
             source_distance = float(np.linalg.norm(evaluation[start, :2] - np.asarray(manifest['goal']['center_xy_m'])))
-        if source_distance is None or source_distance < settings['min_source_goal_distance_m']:
+        if task_profile == 'pickplace' and (source_distance is None or source_distance < settings['min_source_goal_distance_m']):
             issues.append('initial object is already at/too near goal; needs a real transfer')
         motion = manual_motion_metrics(rows, start, end, settings)
         candidate = not issues and not synthetic
@@ -178,6 +179,7 @@ def audit_recording(session, settings, validate_fn=None):
                             training_approved=bool(candidate and reviewed and training_allowed and replay_verified)))
     return dict(schema='openarm_dataset_audit_v1', session=str(session.resolve()),
                 dataset_name=collection.get('dataset_name'), stage=collection.get('stage'),
+                task_profile=task_profile,
                 batch_id=collection.get('batch_id'), batch_name=collection.get('batch_name'),
                 synthetic_input=synthetic, training_allowed=training_allowed,
                 recording_digest=digest, quality_contract_digest=contract_digest,
@@ -187,4 +189,4 @@ def audit_recording(session, settings, validate_fn=None):
                 physical_success_segments=sum(bool(t.get('eligible_success_segment')) for t in trials),
                 candidate_successes=sum(t['candidate'] for t in reports),
                 training_approved_successes=sum(t['training_approved'] for t in reports),
-                scope='candidates require visual review; synthetic/pilot/evaluation excluded from training')
+                scope='task-profile-aware candidates require visual review; synthetic/pilot/evaluation excluded from training')

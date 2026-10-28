@@ -38,6 +38,22 @@ D:\openpi\dataset\
 
 ## 2. 不同阶段的数据集名称
 
+### 2.1 当前优先技能：抓取、保持 3 秒、原位放下
+
+使用 `-Task Hold` 时，系统不会要求把方块搬到绿色区域。机器人抓取并抬起后会自动锁定当前位置，界面倒计时保持 3 秒；倒计时结束后，操作者保持手腕不动并张手约 0.35 秒，机器人自动回到抓取源位置下降并释放。
+
+该任务使用独立目录，绝不与下面的搬运任务混合：
+
+| 模式 | 数据集目录名 | 建议数量 | 训练用途 |
+|---|---|---:|---|
+| `Pilot -Task Hold` | `openarm_grasp_hold_return_p01_pilot5_v1` | 5 条成功试采 | 否 |
+| `Collect -Task Hold` | `openarm_grasp_hold_return_p02_core30_v1` | 30 条审核通过的成功示范 | 是 |
+| `Eval -Task Hold` | `openarm_grasp_hold_return_p05_eval5_v1` | 5 条隔离参考 | 否 |
+
+先采 5 条试采；全部通过物理判定、回放和人工查看后，再采 30 条正式训练数据。30 条是用于首次验证单一技能训练的适量起点，不代表已经获得跨场景泛化能力。
+
+### 2.2 原有搬运到绿色目标区任务
+
 | 命令模式 | 数据集目录名 | 用途与数量 | 能否进入正式训练 |
 |---|---|---|---|
 | `Smoke` | `openarm_pickplace_p00_smoke_v1` | 软件意图自检与动力学回放 | 否，明确标记 synthetic |
@@ -120,19 +136,31 @@ raw\openarm_pickplace_p02_core100_v1\batch_003\<时间_session>\
 
 等待命令结束，检查退出结果以及 `reports\openarm_pickplace_p00_smoke_v1\batch_001\*.smoke.json`。应为 `verdict: PASS`。软件测试的仿真时间不等于现场墙钟时间。
 
-### 3.5 真人试采：先从这里开始
+### 3.5 真人试采：先从当前保持技能开始
 
 ```powershell
-& 'D:\openpi\dataset\dataset.ps1' -Mode Pilot -Pose center -Operator operator01
+& 'D:\openpi\dataset\dataset.ps1' -Mode Pilot -Task Hold -Pose center -Trials 5 -ResetSeconds 3 -Seconds 0 -Batch 1 -Operator operator01
 ```
 
-打开当前熟悉的遥操窗口。按一次 **SPACE** 开始，然后用手靠近、捏合、搬运到绿色目标区、张手放下。默认一个尝试结束后自动保存退出；失败也保存。开始后的最长活动时长默认 180 秒，未完成则保留中断记录。也可随时按 **Q** 保存退出。
+打开当前熟悉的遥操窗口。按一次 **SPACE** 开始，然后用手靠近并捏合。机器人抓取、抬起后会显示 3 秒保持倒计时；保持手腕不动，倒计时结束后再张手，机器人自动原位放下。失败也保存，可随时按 **Q** 保存退出。
 
 采集过程不新增逐阶段模式切换键，不要求每次重新做分轴检测。标定沿用复制过来的个人标定；只有操作者、相机位置或识别尺度明显变化时再校准。`C` 只重新对齐人手到机械臂的相对映射，不复位机械臂或方块。
 
-初始 20 条试采建议全量查看，覆盖靠近、抓起、搬运与稳定放下。确认操作与数据都稳定后再进入 `Collect`。
+当前保持技能先做 5 条试采并全量查看，覆盖靠近、抓起、稳定保持与原位放下。确认全部稳定后再进入 `Collect -Task Hold`。
 
 ## 4. 正式采集命令
+
+### 4.0 当前保持技能：首批 30 条
+
+建议分成 3 个批次，每批 10 段；每批结束后先审核，再继续下一批：
+
+```powershell
+& 'D:\openpi\dataset\dataset.ps1' -Mode Collect -Task Hold -Pose center -Trials 10 -ResetSeconds 3 -Seconds 0 -Batch 1
+& 'D:\openpi\dataset\dataset.ps1' -Mode Collect -Task Hold -Pose center -Trials 10 -ResetSeconds 3 -Seconds 0 -Batch 2
+& 'D:\openpi\dataset\dataset.ps1' -Mode Collect -Task Hold -Pose center -Trials 10 -ResetSeconds 3 -Seconds 0 -Batch 3
+```
+
+这里只统计审核通过的成功段。失败、取消或未保持满 3 秒的数据会保留用于排查，但不计入 30 条训练示范。
 
 ### 4.1 基础 100 条
 
@@ -194,10 +222,10 @@ raw\openarm_pickplace_p02_core100_v1\batch_003\<时间_session>\
 & 'D:\openpi\dataset\dataset.ps1' -Mode Pilot -Trials 3 -Seconds 300
 ```
 
-`Trials` 是尝试数，不是成功数。非最后一段结束后，机械臂与方块会自动回到该 session 的初始状态；随后进入受保护的操作者重置时间，默认 8 秒。界面会显示段号、开始、完成和重置倒计时，倒计时结束前不会触发下一段。可用 `-ResetSeconds` 调整时长：
+`Trials` 是尝试数，不是成功数。非最后一段结束后，机械臂与方块会自动回到该 session 的初始状态；随后进入受保护的操作者重置时间，默认 3 秒，试采与正式采集一致。界面会显示段号、开始、完成和重置倒计时，倒计时结束前不会触发下一段。可用 `-ResetSeconds` 调整时长：
 
 ```powershell
-& 'D:\openpi\dataset\dataset.ps1' -Mode Pilot -Trials 3 -ResetSeconds 8 -Seconds 0
+& 'D:\openpi\dataset\dataset.ps1' -Mode Pilot -Task Hold -Trials 3 -ResetSeconds 3 -Seconds 0
 ```
 
 自动场景复位会记录独立标记，并在原始动作回放时重现，但不会被分段器误当成训练轨迹。操作者应利用倒计时恢复手部和身体姿势，看到下一段开始提示后再靠近、捏合。

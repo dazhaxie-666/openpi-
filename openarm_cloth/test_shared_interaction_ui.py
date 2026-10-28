@@ -39,6 +39,15 @@ class SharedInteractionUITests(unittest.TestCase):
         cue=shared_interaction_hint(self.task,self.feedback,1.)
         self.assertEqual(cue['code'],'release_confirming');self.assertAlmostEqual(cue['progress'],.5)
 
+    def test_hold_collection_shows_three_second_countdown_and_source_release(self):
+        self.task.phase='transport';self.task.phase_since=1.;self.task.collection_task_profile='hold'
+        self.task.collection_hold_seconds=3.;self.task.grasp_confirmed=True
+        cue=shared_interaction_hint(self.task,self.feedback,2.)
+        self.assertEqual(cue['code'],'payload_timed_hold');self.assertIn('2.0 秒',cue['title'])
+        self.task.collection_hold_complete=True
+        cue=shared_interaction_hint(self.task,self.feedback,4.)
+        self.assertEqual(cue['code'],'hold_complete');self.assertIn('原位放下',cue['title'])
+
     def test_large_prompt_is_below_camera_and_does_not_cover_landmarks(self):
         camera=np.full((540,960,3),70,np.uint8)
         cue=shared_interaction_hint(self.task,self.feedback,1.)

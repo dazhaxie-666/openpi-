@@ -8,7 +8,8 @@ from pathlib import Path
 
 
 class DatasetCapture:
-    def __init__(self, hz=10.0, max_trials=0, max_seconds=0.0, reset_seconds=8.0):
+    def __init__(self, hz=10.0, max_trials=0, max_seconds=0.0, reset_seconds=3.0,
+                 task_profile='pickplace', hold_seconds=0.0, source_tolerance_m=0.03):
         if not math.isfinite(hz) or not 1 <= hz <= 20:
             raise ValueError('capture Hz must be in 1..20')
         if max_trials < 0 or max_seconds < 0 or not math.isfinite(reset_seconds) or reset_seconds < 0:
@@ -18,6 +19,13 @@ class DatasetCapture:
         self.max_trials = int(max_trials)
         self.max_seconds = float(max_seconds)
         self.reset_seconds = float(reset_seconds)
+        if task_profile not in ('pickplace', 'hold'):
+            raise ValueError('unknown collection task profile')
+        if not math.isfinite(hold_seconds) or hold_seconds < 0:
+            raise ValueError('hold seconds must be nonnegative')
+        self.task_profile = task_profile
+        self.hold_seconds = float(hold_seconds)
+        self.source_tolerance_m = float(source_tolerance_m)
         self.reset_state = None
         self.reset_count = 0
         self.ready_tcp = np.array([.38, -.06, .58])
@@ -31,6 +39,10 @@ class DatasetCapture:
                     inter_trial_reset_seconds=self.reset_seconds,
                     final_trial_notice_seconds=2.0,
                     automatic_scene_reset=True,
+                    task_profile=self.task_profile,
+                    required_payload_hold_seconds=self.hold_seconds,
+                    return_to_source=self.task_profile == 'hold',
+                    source_return_tolerance_m=self.source_tolerance_m,
                     collection_ready_tcp_m=self.ready_tcp.tolist(),
                     reset_scope='instant simulator environment reset between labelled trials; reset rows stay outside training segments',
                     filtering='raw accepted targets preserved; no posthoc action smoothing')
@@ -41,6 +53,9 @@ class DatasetCapture:
         task.inter_trial_reset_s = self.reset_seconds
         task.final_trial_notice_s = 2.0
         task.automatic_scene_reset = True
+        task.collection_task_profile = self.task_profile
+        task.collection_hold_seconds = self.hold_seconds
+        task.collection_source_tolerance_m = self.source_tolerance_m
 
     def set_collection_context(self, context):
         self.collection_context = dict(context)

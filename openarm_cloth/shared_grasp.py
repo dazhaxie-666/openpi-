@@ -41,6 +41,8 @@ class SharedGraspTask(DirectHumanTask):
         self.trial_limit=0;self.inter_trial_reset_s=0.;self.final_trial_notice_s=0.
         self.reset_until=None;self.final_notice_until=None;self.last_trial_result=None
         self.automatic_scene_reset=False;self.scene_reset_pending=False;self.scene_reset_count=0
+        self.collection_task_profile='pickplace';self.collection_hold_seconds=0.
+        self.collection_source_tolerance_m=.03;self.collection_hold_complete=False
 
     def surface_clearance(self,tcp,visual):
         """TCP reference to the observed known cube's surface, not its centre."""
@@ -310,6 +312,7 @@ class SharedGraspTask(DirectHumanTask):
             if self.fresh_grasp_request(human,readiness):
                 self.trial_id+=1;self.trials.append(dict(trial_id=self.trial_id,start_s=float(clock),
                     status='active',source='fresh in-range open-to-pinch + B RGB-D grasp planning'))
+                self.collection_hold_complete=False
                 self.reset_grasp_entry()
                 self.intent_latched=True;self.object_anchor=np.asarray(target['center']).copy()
                 self.enter('plan',clock,'New in-range pinch confirmed by 2D/3D hand input: planning')
@@ -382,6 +385,19 @@ class SharedGraspTask(DirectHumanTask):
                 self.enter('holding_payload',clock,'lift held; preserve grip, open to request safe lowering')
             return TaskCommand('lift' if self.phase=='lift' else 'hold',finger=0.,owner='shared_confirmed_lift')
         if self.phase in ('transport','holding_payload'):
+            if self.collection_task_profile=='hold':
+                remaining=max(0.,self.collection_hold_seconds-(clock-self.phase_since)) if not self.collection_hold_complete else 0.
+                if remaining>0.:
+                    self.open_since=None
+                    self.message=f'PAYLOAD HOLD: keep still for {remaining:.1f}s before returning to source'
+                    return TaskCommand('hold',finger=0.,owner='shared_collection_payload_hold')
+                self.collection_hold_complete=True;self.release_armed=True
+                if self.confirmed_open(human,.35):
+                    self.release_target=feedback.tcp.copy();self.release_target[2]=self.object_anchor[2]+.002
+                    self.enter('lower',clock,'hold complete: return to source support before release')
+                    return TaskCommand('lower',self.release_target.copy(),0.,'shared_source_return')
+                self.message='HOLD COMPLETE: keep wrist still and OPEN 0.35s to return the cube to its source'
+                return TaskCommand('hold',finger=0.,owner='shared_collection_wait_open')
             if closed_intent:self.release_armed=True
             if self.placement_blocked_origin is not None:
                 if np.linalg.norm(feedback.tcp-self.placement_blocked_origin)>=.020:

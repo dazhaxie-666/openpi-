@@ -52,13 +52,15 @@ class CaptureTests(unittest.TestCase):
         self.assertTrue(capture.should_stop(task, 3.))
 
     def test_collection_configures_visible_trial_and_reset_contract(self):
-        capture = DatasetCapture(10, max_trials=10, reset_seconds=8)
+        capture = DatasetCapture(10, max_trials=10, reset_seconds=3, task_profile='hold', hold_seconds=3)
         task = SimpleNamespace()
         capture.configure_task(task)
         self.assertEqual(task.trial_limit, 10)
-        self.assertEqual(task.inter_trial_reset_s, 8.)
+        self.assertEqual(task.inter_trial_reset_s, 3.)
         self.assertEqual(task.final_trial_notice_s, 2.)
         self.assertTrue(task.automatic_scene_reset)
+        self.assertEqual(task.collection_task_profile, 'hold')
+        self.assertEqual(task.collection_hold_seconds, 3.)
 
     def test_collection_reset_uses_captured_state_and_farther_ready_tcp(self):
         capture = DatasetCapture(10, max_trials=10, reset_seconds=8)
@@ -132,11 +134,15 @@ class DataContractTests(unittest.TestCase):
         self.assertGreater(manual_motion_metrics(rows, 0, n, self.settings)['reversal_frames'], 0)
 
     def test_stage_names_and_training_roles_are_distinct(self):
-        stages = configuration()['stages']
-        self.assertEqual(len({s['name'] for s in stages.values()}), len(stages))
+        config = configuration();stages = config['stages'];hold_stages=config['hold_stages']
+        all_stages=[*stages.values(),*hold_stages.values()]
+        self.assertEqual(len({s['name'] for s in all_stages}), len(all_stages))
         for stage in ('smoke', 'pilot', 'eval'):
             self.assertFalse(stages[stage]['training_allowed'])
         self.assertEqual(sum(stages[k]['target_successes'] for k in ('core', 'coverage', 'recovery')), 300)
+        self.assertEqual(hold_stages['pilot']['target_successes'], 5)
+        self.assertEqual(hold_stages['core']['target_successes'], 30)
+        self.assertEqual(hold_stages['eval']['target_successes'], 5)
 
     def test_reversal_check_handles_repeated_targets_between_camera_updates(self):
         target = np.zeros((8, 18))

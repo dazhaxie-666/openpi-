@@ -197,6 +197,16 @@ class DirectTaskTests(unittest.TestCase):
         self.task.fail('broken_internal_state', self.clock)
         self.assertFalse(evaluator.report(self.task)['physical_task_success'])
 
+    def test_hold_return_profile_requires_timed_hold_and_stable_source_release(self):
+        evaluator=TaskEvaluator.__new__(TaskEvaluator)
+        evaluator.max_lift=.06;evaluator.best_lift=3.5;evaluator.best_hold=3.1
+        evaluator.best_placed=0.;evaluator.best_source_placed=.6
+        evaluator.min_source_return_error=.01;evaluator.source_tolerance_m=.03
+        self.start();self.task.collection_task_profile='hold';self.task.collection_hold_seconds=3.
+        self.assertTrue(evaluator.report(self.task)['physical_task_success'])
+        evaluator.best_hold=2.9
+        self.assertFalse(evaluator.report(self.task)['physical_task_success'])
+
 
 class DirectRobotTests(unittest.TestCase):
     def test_a_reference_blocked_right_arm_does_not_block_left_or_pinch(self):

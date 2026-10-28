@@ -91,6 +91,14 @@ class ReviewGateTests(unittest.TestCase):
         self.save()
         self.assertEqual(self.audit()['candidate_successes'], 0)
 
+    def test_hold_return_task_does_not_require_a_transfer_to_green(self):
+        self.context['task_profile']='hold'
+        self.rows['evaluation_next'][:, :2] = [.43, -.1]
+        self.save()
+        report=self.audit()
+        self.assertEqual(report['task_profile'],'hold')
+        self.assertEqual(report['candidate_successes'],1)
+
 
 if __name__ == '__main__':
     unittest.main()

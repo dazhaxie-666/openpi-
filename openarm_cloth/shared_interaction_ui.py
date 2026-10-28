@@ -43,6 +43,20 @@ def shared_interaction_hint(task,feedback,clock,paused=False):
         return cue('grasp_ready',prefix+'现在捏合，捏合确认后正式开始采集','READY TO GRASP - PINCH NOW',
             f'距目标表面约 {distance:.0f} 毫米；捏合后本段开始，自动规划、闭合和提起','ready')
     if task.phase in ('transport','holding_payload'):
+        if getattr(task,'collection_task_profile','pickplace')=='hold':
+            required=float(getattr(task,'collection_hold_seconds',3.))
+            remaining=max(0.,required-(clock-float(getattr(task,'phase_since',clock)))) if not getattr(task,'collection_hold_complete',False) else 0.
+            if remaining>0.:
+                return cue('payload_timed_hold',numbered(f'采集中：保持方块不动，还剩 {remaining:.1f} 秒'),
+                    'HOLD PAYLOAD STILL', '机械臂会自动保持；暂时不要移动手腕或张手', 'auto',
+                    0. if required<=0 else 1.-remaining/required)
+            progress=(0. if task.open_since is None or task.open_stamp is None else
+                float(np.clip((task.open_stamp-task.open_since)/.35,0.,1.)))
+            if task.open_since is not None:
+                return cue('source_release_confirming','保持完成：正在确认张手','HOLD COMPLETE - CONFIRMING OPEN',
+                    f'张手确认 {progress:.0%}；随后自动原位下降并放下方块','auto',progress)
+            return cue('hold_complete',numbered('采集中：保持完成，请张手原位放下'),
+                'HOLD COMPLETE - OPEN TO RETURN', '手腕保持不动；连续张手约 0.35 秒，系统会自动下降到原位置','ready')
         if task.phase=='holding_payload':return cue('payload_hold','夹持反馈待确认：保持不动，张手可请求放下','PAYLOAD HOLD - OPEN TO PLACE',theme='hold')
         if task.placement_blocked_origin is not None:
             return cue('place_blocked','此处无法放下：已恢复搬运，请移手换个位置','PLACE BLOCKED - MOVE WRIST TO ANOTHER PLACE',
@@ -55,7 +69,8 @@ def shared_interaction_hint(task,feedback,clock,paused=False):
         return cue('carry_ready',numbered('采集中：已抓牢，请移到绿色目标区上方再张手'),'CARRY TO GREEN - OPEN TO PLACE',
             '先确认方块位于绿色圆区上方；无需再次捏合，张手连续约 0.35 秒后放下','ready')
     if task.phase in ('lower','release','retract','verify'):
-        titles=dict(lower='张手已收到：正在下降到桌面',release='正在打开夹爪，放下方块',
+        source_return=getattr(task,'collection_task_profile','pickplace')=='hold'
+        titles=dict(lower='张手已收到：正在原位下降到桌面' if source_return else '张手已收到：正在下降到桌面',release='正在打开夹爪，放下方块',
             retract='夹爪已打开：机械臂正在退出',verify='正在确认方块已放稳')
         return cue('placing',numbered('采集中：'+titles[task.phase]),'PLACING - '+task.phase.upper(),theme='auto')
     if task.phase=='restore_view':return cue('human_view_up','视野恢复中：机械臂跟随你向上移手','HUMAN-CONTROLLED UPWARD MOTION',

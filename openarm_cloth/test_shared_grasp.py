@@ -88,6 +88,21 @@ class SharedTaskTests(unittest.TestCase):
         for _ in range(10):cmd=self.tick(1.2)
         self.assertEqual(cmd.stage,'lower');self.assertEqual(cmd.finger,0.)
 
+    def test_collection_hold_task_enforces_three_seconds_then_returns_at_source(self):
+        self.request();self.task.grasp_confirmed=True;self.fb.gripping=True
+        self.task.collection_task_profile='hold';self.task.collection_hold_seconds=3.
+        began=self.i*.05;self.task.enter('transport',began,'fixture lift complete')
+        start_tcp=self.fb.tcp.copy()
+        for _ in range(59):
+            cmd=self.tick(1.2)
+            self.assertEqual((cmd.stage,cmd.owner),('hold','shared_collection_payload_hold'))
+        self.assertFalse(self.task.collection_hold_complete)
+        for _ in range(3):cmd=self.tick(.1)
+        self.assertTrue(self.task.collection_hold_complete)
+        for _ in range(10):cmd=self.tick(1.2)
+        self.assertEqual(cmd.stage,'lower')
+        np.testing.assert_allclose(cmd.target[:2],start_tcp[:2])
+
     def test_jaw_closure_is_not_claimed_as_grasp_without_bilateral_evidence(self):
         self.request();self.task.enter('close',self.i*.05,'fixture')
         self.task.context=observation(force=(3.,0.));self.task.hand_intent_valid=False

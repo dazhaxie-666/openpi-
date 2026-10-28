@@ -2,6 +2,8 @@
 param(
     [ValidateSet('Check','Camera','Test','Smoke','Pilot','Collect','Coverage','Recovery','Eval','Audit','Replay','Review','Summary')]
     [string]$Mode = 'Check',
+    [ValidateSet('PickPlace','Hold')]
+    [string]$Task = 'PickPlace',
     [string]$Session,
     [ValidateSet('center','left','right','near','far','yaw0','yaw60','random')]
     [string]$Pose = 'center',
@@ -11,7 +13,7 @@ param(
     [int]$Batch = 1,
     [int]$Trials = 1,
     [ValidateRange(0,3600)]
-    [double]$ResetSeconds = 8,
+    [double]$ResetSeconds = 3,
     [double]$Seconds = 180,
     [int]$Steps = 1500,
     [Nullable[int]]$Seed,
@@ -41,7 +43,7 @@ if ($Mode -eq 'Test') {
 } else {
     $datasetOperation = if ($datasetModeMap.ContainsKey($Mode)) { 'collect' } else { $Mode.ToLowerInvariant() }
     $datasetCliArgs = @($datasetCli, $datasetOperation, '--camera', "$Camera", '--operator', $Operator,
-                        '--pose', $Pose, '--batch', "$Batch", '--trials', "$Trials", '--reset-seconds', "$ResetSeconds",
+                        '--task', $Task.ToLowerInvariant(), '--pose', $Pose, '--batch', "$Batch", '--trials', "$Trials", '--reset-seconds', "$ResetSeconds",
                         '--seconds', "$Seconds", '--steps', "$Steps")
     if ($datasetModeMap.ContainsKey($Mode)) { $datasetCliArgs += @('--stage', $datasetModeMap[$Mode]) }
     if ($Session) { $datasetCliArgs += @('--session', $Session) }

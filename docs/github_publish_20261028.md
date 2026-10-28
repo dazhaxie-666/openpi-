@@ -6,7 +6,10 @@
 
 - 新增仓库内 `dataset/` 统一入口、阶段配置、数据契约测试、审核、动作回放和人工准入流程。
 - 支持一个 session 采集指定数量的试次；界面明确显示当前段号、开始、结束、最终保存和操作者重置倒计时。
-- 非最后一段结束后自动恢复机械臂、夹爪、方块和任务内部状态，再进入默认 8 秒受保护重置时间。
+- 非最后一段结束后自动恢复机械臂、夹爪、方块和任务内部状态，再进入默认 3 秒受保护重置时间。
+- 新增独立 `Hold` 任务：抓取并抬起后锁定位置保持 3 秒，保持完成后接受张手并自动回到抓取源位置下降。
+- `Hold` 任务按稳定保持时间、原位释放稳定时间和 3 cm 源位置容差独立评分，不再错误使用绿色目标区标准。
+- 小规模首轮计划为 5 条试采、30 条正式训练示范和 5 条隔离评估参考，目录与原搬运任务完全分离。
 - 采集初始 TCP 与方块保持更大距离，降低启动时误触和遮挡风险；普通非采集入口的默认行为不变。
 - `C` 的含义明确为人手到机械臂相对映射重新对齐，不再让操作者误认为它会重置场景。
 - 原始控制行新增场景复位标记和计数；分段器排除复位/最终提示行，避免生成虚假试次。
@@ -21,16 +24,16 @@
 & .\dataset\dataset.ps1 -Mode Check
 & .\dataset\dataset.ps1 -Mode Camera -Camera 0
 & .\dataset\dataset.ps1 -Mode Test
-& .\dataset\dataset.ps1 -Mode Smoke -Trials 2 -ResetSeconds 2
-& .\dataset\dataset.ps1 -Mode Pilot -Camera 0 -Trials 3 -ResetSeconds 8 -Seconds 0 -Batch 1
+& .\dataset\dataset.ps1 -Mode Smoke -Task Hold -Trials 2 -ResetSeconds 3
+& .\dataset\dataset.ps1 -Mode Pilot -Task Hold -Camera 0 -Trials 5 -ResetSeconds 3 -Seconds 0 -Batch 1
 ```
 
 详细的阶段隔离、操作方式、质量指标、回放和审核命令见 `dataset/README_CN.md`。
 
 ## 验证
 
-- 104 项数据契约、共享抓取、分段、界面、自动复位和回放回归测试通过。
-- 两段连续软件夹具完成 2 次物理成功抓放，段间恰好应用 1 次环境复位。
+- 108 项数据契约、共享抓取、保持任务、分段、界面、自动复位和回放回归测试通过。
+- 两段连续 `Hold` 软件夹具完成 2 次物理成功：稳定保持约 3.43 秒，原位误差约 4.5 mm，段间恰好应用 1 次环境复位。
 - 原始动作回放通过，最大 `qpos` / `qvel` 差异均为 0，并报告 `environment_resets_applied: 1`。
 - 环境、MediaPipe 模型、MuJoCo 场景、机器人 RGB-D 和源码哈希预检通过。
 

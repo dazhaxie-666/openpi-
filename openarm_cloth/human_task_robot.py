@@ -888,8 +888,12 @@ class TaskEvaluator:
         self.object_geom = model.geom('droid_object_geom').id
         self.fingers = {model.geom(f'openarm_{side}_{f}_finger_collision').id for f in ('right', 'left')}
         self.finger_qpos = finger_joint_indices(model, side)[0]
+        self.initial_xy = np.asarray(data.xpos[self.body, :2], dtype=float).copy()
         self.initial_z = float(data.xpos[self.body, 2])
         self.lift_run = self.best_lift = self.placed_run = self.best_placed = 0.
+        self.hold_run = self.best_hold = self.source_placed_run = self.best_source_placed = 0.
+        self.min_source_return_error = float('inf')
+        self.source_tolerance_m = .03
         self.max_lift = 0.
 
     def sample(self, data, stage, dt):
@@ -904,22 +908,42 @@ class TaskEvaluator:
         lifted = dz > .03 and len(contacts) == 2
         self.lift_run = self.lift_run + dt if lifted else 0.
         self.best_lift = max(self.best_lift, self.lift_run)
+        payload_hold = lifted and stage in ('hold', 'transport', 'holding_payload')
+        self.hold_run = self.hold_run + dt if payload_hold else 0.
+        self.best_hold = max(self.best_hold, self.hold_run)
         released_stage = stage in ('retract', 'verify', 'success') or (
             stage == 'direct' and np.min(data.qpos[self.finger_qpos]) > .040)
-        placed = (released_stage and (stage != 'direct' or self.best_lift >= .5 - 1e-8) and not contacts
-                  and np.linalg.norm(p[:2] - self.config.goal_xy) <= self.config.goal_radius_m
-                  and abs(p[2] - (TABLE_TOP + CUBE_HALF)) < .01
-                  and np.linalg.norm(data.cvel[self.body, 3:]) < .02
-                  and np.linalg.norm(data.cvel[self.body, :3]) < .2)
+        stable_release = (released_stage and (stage != 'direct' or self.best_lift >= .5 - 1e-8) and not contacts
+                          and abs(p[2] - (TABLE_TOP + CUBE_HALF)) < .01
+                          and np.linalg.norm(data.cvel[self.body, 3:]) < .02
+                          and np.linalg.norm(data.cvel[self.body, :3]) < .2)
+        placed = stable_release and np.linalg.norm(p[:2] - self.config.goal_xy) <= self.config.goal_radius_m
+        source_error = float(np.linalg.norm(p[:2] - self.initial_xy))
+        source_placed = stable_release and source_error <= self.source_tolerance_m
+        if stable_release:self.min_source_return_error=min(self.min_source_return_error,source_error)
         self.placed_run = self.placed_run + dt if placed else 0.
         self.best_placed = max(self.best_placed, self.placed_run)
+        self.source_placed_run = self.source_placed_run + dt if source_placed else 0.
+        self.best_source_placed = max(self.best_source_placed, self.source_placed_run)
         return np.array([*p, dz, float(len(contacts)), float(placed)])
 
     def report(self, task):
+        profile=getattr(task,'collection_task_profile','pickplace')
+        required_hold=float(getattr(task,'collection_hold_seconds',0.))
+        tolerance=float(getattr(self,'source_tolerance_m',getattr(task,'collection_source_tolerance_m',.03)))
+        best_hold=float(getattr(self,'best_hold',self.best_lift))
+        best_source=float(getattr(self,'best_source_placed',0.))
+        source_error=float(getattr(self,'min_source_return_error',float('inf')))
+        completed=bool(task.stage == 'success' or (getattr(task,'control_mode','') == 'direct' and task.stage != 'failed'))
+        physical=(completed and self.best_lift >= .5 - 1e-8 and
+                  (best_hold >= required_hold - 1e-8 and best_source >= .5 - 1e-8
+                   if profile == 'hold' else self.best_placed >= .5 - 1e-8))
         return dict(scope='Independent simulated object/contact evaluation; never control input',
                     max_lift_m=self.max_lift, sustained_lift_s=self.best_lift,
+                    stable_payload_hold_s=best_hold,
                     stable_released_in_goal_s=self.best_placed,
-                    physical_task_success=bool((task.stage == 'success' or (
-                                               getattr(task, 'control_mode', '') == 'direct' and task.stage != 'failed'))
-                                               and self.best_lift >= .5 - 1e-8
-                                               and self.best_placed >= .5 - 1e-8))
+                    stable_released_at_source_s=best_source,
+                    source_return_error_m=None if not np.isfinite(source_error) else source_error,
+                    source_return_tolerance_m=tolerance,
+                    task_profile=profile, required_payload_hold_s=required_hold,
+                    physical_task_success=bool(physical))

@@ -218,13 +218,16 @@ def scripted_input(task, feedback, clock, index):
                 target=np.asarray(feedback.visual['center'])+[0,0,.055]
                 point=task.human_anchor+(target-task.robot_anchor)/task.motion_gains
         elif phase=='transport':
-            # Exercise the live failure case: position stays available while
-            # fingers are unobserved, then OPEN requests placement directly.
-            ratio=None
-            if not task.carry_missing:
-                target=np.r_[task.config.goal_xy,task.robot_anchor[2]]
-                point=task.human_anchor+(target-task.robot_anchor)/task.motion_gains
-            if task.release_armed and np.linalg.norm(feedback.tcp[:2]-task.config.goal_xy)<.015:ratio=1.2
+            if task.collection_task_profile=='hold':
+                ratio=1.2 if task.collection_hold_complete else None
+            else:
+                # Exercise the live failure case: position stays available while
+                # fingers are unobserved, then OPEN requests placement directly.
+                ratio=None
+                if not task.carry_missing:
+                    target=np.r_[task.config.goal_xy,task.robot_anchor[2]]
+                    point=task.human_anchor+(target-task.robot_anchor)/task.motion_gains
+                if task.release_armed and np.linalg.norm(feedback.tcp[:2]-task.config.goal_xy)<.015:ratio=1.2
         elif phase in ('reacquire','plan','transit','approach','descend','close','lift'):
             ratio=None;valid=False
         return HumanInput(index,point if valid else None,ratio,valid,clock)
@@ -567,6 +570,7 @@ def run(args, dataset_capture=None):
                         gripper_mapping=args.gripper_mode+' calibrated pinch -> 0..0.044 m' if direct else 'gesture hysteresis',
                         gesture_threshold_role='start/intent only; accepted aperture has independent hand state' if direct else 'aperture switching')
         evaluator = TaskEvaluator(model, data, config)
+        evaluator.source_tolerance_m=float(getattr(task,'collection_source_tolerance_m',.03))
         previous_shared_phase='manual'
         if args.video:
             path = args.video.resolve()
@@ -613,8 +617,10 @@ def run(args, dataset_capture=None):
                     (output / 'images' / camera).mkdir(parents=True)
             wall_origin = last_tick = time.perf_counter()
             next_vision = 0.
+            hold_collection=shared and getattr(task,'collection_task_profile','pickplace')=='hold'
             print(f'HUMAN TASK | {source_kind} | output {output}', flush=True)
-            print('SHARED: approach by wrist; PINCH requests robot grasp/lift; carry to GREEN, OPEN lowers and releases.' if shared else
+            print(('SHARED HOLD: approach by wrist; PINCH requests grasp/lift; hold still 3 s, then OPEN returns to source.'
+                   if hold_collection else 'SHARED: approach by wrist; PINCH requests robot grasp/lift; carry to GREEN, OPEN lowers and releases.') if shared else
                   'POSE2ARM ORIGINAL: 10 fresh frames calibrate each arm; original A joints drive B. C recalibrates.'
                   if use_a else 'DIRECT: wrist moves arm; PINCH closes, OPEN releases anywhere. Retry freely; Q saves and ends.'
                   if direct else 'ASSISTED: move to cube, PINCH and HOLD; after lift move over GREEN goal, then OPEN.', flush=True)
@@ -626,7 +632,8 @@ def run(args, dataset_capture=None):
                       ' | G pinch / O spread x10 each; hold 1.2s; READY means valid endpoints, Q saves.',flush=True)
             print(f'PREVIEW at most {preview_hz:g} Hz; control target {control_hz:g} Hz; keyboard polled every control tick.',flush=True)
             if direct and not use_a:
-                print('SHARED: PINCH requests RGB-D grasp; carry by XYZ; OPEN requests supported placement. Trial boundaries are automatic.' if shared else
+                print(('SHARED HOLD: robot keeps the lifted pose for 3 s; keep wrist still, then OPEN requests source return.'
+                       if hold_collection else 'SHARED: PINCH requests RGB-D grasp; carry by XYZ; OPEN requests supported placement. Trial boundaries are automatic.') if shared else
                       'GRIPPER: L holds current aperture / resumes fingers; H explicitly holds 50%. Default remains continuous.',flush=True)
             index = 0
             previous_paused=False
@@ -746,7 +753,9 @@ def run(args, dataset_capture=None):
                     if palm_yaw is not None:palm_yaw=DirectPalmYaw()
                     feedback=robot.feedback(clock);task.context=None
                 if shared:
-                    if shared_segments.update(task,rows,clock):evaluator=TaskEvaluator(model,data,config)
+                    if shared_segments.update(task,rows,clock):
+                        evaluator=TaskEvaluator(model,data,config)
+                        evaluator.source_tolerance_m=float(getattr(task,'collection_source_tolerance_m',.03))
                     if task.trials and 'end_s' in task.trials[-1] and 'physics' not in task.trials[-1]:
                         task.trials[-1]['physics']=evaluator.report(task)
                 a_result=None
@@ -1020,11 +1029,12 @@ def run(args, dataset_capture=None):
                 row['image_record_ms']=np.asarray((time.perf_counter()-image_start)*1000)
                 physics_start=time.perf_counter()
                 row['physics_begin_ns']=np.asarray(round(physics_start*1e9),dtype=np.int64)
-                robot.step(dt, evaluator=evaluator, stage=task.stage)
+                evaluation_stage=task.phase if shared else task.stage
+                robot.step(dt, evaluator=evaluator, stage=evaluation_stage)
                 row['physics_end_ns']=np.asarray(time.perf_counter_ns(),dtype=np.int64)
                 row['physics_ms']=np.asarray((time.perf_counter()-physics_start)*1000)
                 expected_sim_time = float(data.time)
-                row['evaluation_next'] = evaluator.sample(data, task.stage, 0.)
+                row['evaluation_next'] = evaluator.sample(data, evaluation_stage, 0.)
                 rows.append(row)
                 if source and not flags['paused'] and task.stage in ('ready', 'follow', 'transport', 'direct'):
                     cursor += dt
@@ -1051,7 +1061,9 @@ def run(args, dataset_capture=None):
                     lines = [f'{"POSE2ARM" if use_a else "RIGHT ARM"} {args.control.upper()}: {task.stage.upper()} | {elapsed:.1f}s',
                              task.message, ('YOUR LEFT -> ROBOT LEFT | YOUR RIGHT -> ROBOT RIGHT' if len(active_sides)==2 else
                                             'YOUR RIGHT HAND -> ROBOT RIGHT ARM | LEFT ARM IDLE' if direct
-                                            else 'Move to cube -> PINCH and HOLD -> move to GREEN -> OPEN'),
+                                            else ('Move to cube -> PINCH -> HOLD 3s -> OPEN at source'
+                                                  if getattr(task,'collection_task_profile','pickplace')=='hold'
+                                                  else 'Move to cube -> PINCH and HOLD -> move to GREEN -> OPEN')),
                              f'{tracking_status} | FINGERS {"OK" if human.gesture_valid else "MISSING"} | age {observation_age:.2f}s',
                              f'MIRROR {"ON" if flags["mirror"] else "OFF"} | IK {robot.direct_ik_mode} | ratio {human.pinch_ratio}',
                              ('Task scored PASS; control stays active. Q saves.' if direct and scored else
@@ -1229,7 +1241,9 @@ def run(args, dataset_capture=None):
                       input_source=source_kind, synthetic_input=bool(args.scripted_check),
                       human_validation_performed=bool(not args.scripted_check and any(bool(r['human_valid']) for r in rows)),
                       human_task_success=bool(success and not args.scripted_check),
-                      scope=('human intent + B RGB-D shared grasp/lift/place; automatic per-trial labels; no trained policy' if shared else
+                      scope=(('human intent + B RGB-D grasp/lift/3s hold/source return; automatic per-trial labels; no trained policy'
+                              if getattr(task,'collection_task_profile','pickplace')=='hold'
+                              else 'human intent + B RGB-D shared grasp/lift/place; automatic per-trial labels; no trained policy') if shared else
                              'original pose2arm calibrated shoulder-elbow-wrist mapping to B dynamic actuators; no autonomous docking or trained policy'
                              if use_a else 'direct human XYZ/yaw + gripper intent through B actuators; bounded camera centering when enabled; no automatic lift or trained policy'
                              if direct else 'shared human intent + B visual docking in simulation; no trained policy'),

@@ -43,10 +43,16 @@ def configuration():
     return json.loads((ROOT / 'config' / 'stages.json').read_text(encoding='utf-8'))
 
 
+def stages_for(config, task_profile='pickplace'):
+    return config['hold_stages'] if task_profile == 'hold' else config['stages']
+
+
 def setup():
     for name in ('raw', 'reports', 'logs', 'snapshots', 'exports', 'tmp', 'calibration'):
         (ROOT / name).mkdir(exist_ok=True)
-    for stage in configuration()['stages'].values():
+    config = configuration()
+    stages = [*config['stages'].values(), *config.get('hold_stages', {}).values()]
+    for stage in stages:
         for name in ('raw', 'reports', 'snapshots'):
             (ROOT / name / stage['name']).mkdir(parents=True, exist_ok=True)
     personal = ROOT / 'calibration/pinch.json'
@@ -181,9 +187,9 @@ def workspace_dir(kind, context):
     return path
 
 
-def stage_output(stage, batch=1):
+def stage_output(stage, batch=1, task_profile='pickplace'):
     config = configuration()
-    name = config['stages'][stage]['name']
+    name = stages_for(config, task_profile)[stage]['name']
     return name, ROOT / 'raw' / name / batch_label(batch) / (stamp() + '_' + uuid.uuid4().hex[:6])
 
 
@@ -205,11 +211,13 @@ def collect(args, smoke=False):
     from run_human_task import build_parser, run
     config = configuration()
     stage = 'smoke' if smoke else args.stage
+    task_contract = config['task_profiles'][args.task]
+    stages = stages_for(config, args.task)
     if stage == 'smoke' and not smoke:
         raise ValueError('software fixtures use smoke mode, never live collection')
     if args.hz != config['capture_hz']:
         raise ValueError('this v1 contract fixes capture at 10 Hz; change/version config before changing rate')
-    name, output = stage_output(stage, args.batch)
+    name, output = stage_output(stage, args.batch, args.task)
     pose_key = args.pose
     if pose_key == 'random':
         pose_key = random.Random(args.seed if args.seed is not None else uuid.uuid4().int).choice(list(config['initial_poses']))
@@ -227,11 +235,14 @@ def collect(args, smoke=False):
                  '--depth-source', 'palm-planar', '--depth-gain', '1.0']
     capture = DatasetCapture(args.hz, max_trials=args.trials,
                              max_seconds=0 if smoke else args.seconds,
-                             reset_seconds=args.reset_seconds)
+                             reset_seconds=args.reset_seconds, task_profile=args.task,
+                             hold_seconds=task_contract['hold_seconds'],
+                             source_tolerance_m=task_contract.get('source_tolerance_m', .03))
     metadata = dict(schema='openarm_collection_context_v1', stage=stage, dataset_name=name,
                     batch_id=args.batch, batch_name=batch_label(args.batch),
-                    purpose=config['stages'][stage]['purpose'],
-                    training_allowed=config['stages'][stage]['training_allowed'] and not smoke,
+                    task_profile=args.task, task_contract=task_contract,
+                    purpose=stages[stage]['purpose'],
+                    training_allowed=stages[stage]['training_allowed'] and not smoke,
                     operator=args.operator, seed=args.seed, initial_pose_key=pose_key,
                     initial_fixture_pose=pose, fixture_scope='initialization only; never policy/perception input',
                     simulation_only=True, synthetic_input=smoke, arguments=argv,
@@ -317,7 +328,10 @@ def review_session(args):
 
 def summary():
     rows = []
-    for stage in configuration()['stages'].values():
+    config = configuration()
+    stage_profiles = [('pickplace', stage) for stage in config['stages'].values()]
+    stage_profiles += [('hold', stage) for stage in config.get('hold_stages', {}).values()]
+    for task_profile, stage in stage_profiles:
         sessions = sorted((ROOT / 'raw' / stage['name']).rglob('collection.json'))
         candidates = approved = attempted = 0
         batches = {}
@@ -338,7 +352,7 @@ def summary():
             batch['trials'] += len(report['trials'])
             batch['candidate_successes'] += report['candidate_successes']
             batch['training_approved_successes'] += report['training_approved_successes']
-        rows.append(dict(dataset_name=stage['name'], sessions=len(sessions), trials=attempted,
+        rows.append(dict(task_profile=task_profile, dataset_name=stage['name'], sessions=len(sessions), trials=attempted,
                          candidate_successes=candidates, training_approved_successes=approved,
                          target_successes=stage['target_successes'], training_allowed=stage['training_allowed'],
                          missing_audits=invalid, batches=batches))
@@ -351,6 +365,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', choices=['check', 'camera', 'smoke', 'collect', 'audit', 'replay', 'review', 'summary'])
     parser.add_argument('--stage', choices=list(configuration()['stages']), default='pilot')
+    parser.add_argument('--task', choices=list(configuration()['task_profiles']), default='pickplace')
     parser.add_argument('--session')
     parser.add_argument('--pose', choices=['random', *configuration()['initial_poses']], default='center')
     parser.add_argument('--seed', type=int)
@@ -359,7 +374,7 @@ def main():
     parser.add_argument('--batch', type=int, default=1, help='numbered collection batch, e.g. 1, 2, 3')
     parser.add_argument('--hz', type=float, default=10)
     parser.add_argument('--trials', type=int, default=1, help='stop after attempts, including failures; 0 means Q saves')
-    parser.add_argument('--reset-seconds', type=float, default=8,
+    parser.add_argument('--reset-seconds', type=float, default=3,
                         help='protected operator reset time between attempts; 0 disables it')
     parser.add_argument('--seconds', type=float, default=180)
     parser.add_argument('--steps', type=int, default=1500)

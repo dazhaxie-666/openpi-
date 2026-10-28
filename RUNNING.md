@@ -34,16 +34,18 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 & .\dataset\dataset.ps1 -Mode Check
 & .\dataset\dataset.ps1 -Mode Camera -Camera 0
 & .\dataset\dataset.ps1 -Mode Test
-& .\dataset\dataset.ps1 -Mode Smoke -Trials 2 -ResetSeconds 2
+& .\dataset\dataset.ps1 -Mode Smoke -Task Hold -Trials 2 -ResetSeconds 3
 ```
 
 真人正式采集前先做三段隔离试采：
 
 ```powershell
-& .\dataset\dataset.ps1 -Mode Pilot -Camera 0 -Trials 3 -ResetSeconds 8 -Seconds 0 -Batch 1
+& .\dataset\dataset.ps1 -Mode Pilot -Task Hold -Camera 0 -Trials 5 -ResetSeconds 3 -Seconds 0 -Batch 1
 ```
 
-每段结束后，除最后一段外，机械臂和方块会自动回到 session 初始状态；界面随后显示受保护的操作者重置倒计时。复位行带有独立标记，不进入任一训练试次，动作回放会在相同边界恢复环境。`C` 只重新对齐人手到机械臂的相对映射，不是场景复位键。抓牢后必须把方块移到绿色目标区上方再张手释放。
+当前 `-Task Hold` 流程为：靠近并捏合，机器人抓取和抬起后锁定位置保持 3 秒；倒计时结束后保持手腕不动并张手，机器人自动回到抓取源位置下降。每段结束后，除最后一段外，机械臂和方块自动复位，并提供 3 秒受保护重置时间。复位行带独立标记，不进入训练试次，动作回放会重现相同边界。`C` 只重新对齐人手到机械臂的相对映射，不是场景复位键。
+
+首次训练建议使用 5 条 `Pilot` 验证，再采 30 条审核通过的 `Collect -Task Hold` 成功示范；详细分批命令见 `dataset/README_CN.md`。原来的搬运到绿色区域任务继续保留为 `-Task PickPlace`。
 
 原始数据、日志、报告、个人标定和导出文件由 `dataset/.gitignore` 保持在本机。完整操作、审核与训练准入规则见 [dataset/README_CN.md](dataset/README_CN.md)。
 

@@ -15,6 +15,11 @@ class BatchTests(unittest.TestCase):
         self.assertEqual([p.parent.name for p in paths], ['batch_001', 'batch_002', 'batch_003'])
         self.assertEqual(len({p.parent.parent for p in paths}), 1)
 
+    def test_hold_task_uses_a_separate_versioned_dataset(self):
+        name,path=dataset_cli.stage_output('core',1,'hold')
+        self.assertEqual(name,'openarm_grasp_hold_return_p02_core30_v1')
+        self.assertEqual(path.parent.parent.name,name)
+
     def test_repeated_collection_in_same_batch_cannot_overwrite_a_session(self):
         with patch.object(dataset_cli, 'stamp', return_value='same_timestamp'):
             first = dataset_cli.stage_output('core', 1)[1]
