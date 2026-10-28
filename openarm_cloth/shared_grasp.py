@@ -43,6 +43,7 @@ class SharedGraspTask(DirectHumanTask):
         self.automatic_scene_reset=False;self.scene_reset_pending=False;self.scene_reset_count=0
         self.collection_task_profile='pickplace';self.collection_hold_seconds=0.
         self.collection_source_tolerance_m=.03;self.collection_hold_complete=False
+        self.collection_release_rearmed=False
 
     def surface_clearance(self,tcp,visual):
         """TCP reference to the observed known cube's surface, not its centre."""
@@ -318,6 +319,7 @@ class SharedGraspTask(DirectHumanTask):
                 self.trial_id+=1;self.trials.append(dict(trial_id=self.trial_id,start_s=float(clock),
                     status='active',source='fresh in-range open-to-pinch + B RGB-D grasp planning'))
                 self.collection_hold_complete=False
+                self.collection_release_rearmed=False
                 self.reset_grasp_entry()
                 self.intent_latched=True;self.object_anchor=np.asarray(target['center']).copy()
                 self.enter('plan',clock,'New in-range pinch confirmed by 2D/3D hand input: planning')
@@ -326,7 +328,8 @@ class SharedGraspTask(DirectHumanTask):
             else:self.message='HUMAN APPROACH: wrist follow; near cube new PINCH requests precision grasp'
             return command
         if self.phase=='restore_view':return self.human_view_command(human,feedback,clock,recenter)
-        if self.phase in ('reacquire','plan','transit','approach','descend','close') and cancel_open:
+        if (self.collection_task_profile!='hold'
+                and self.phase in ('reacquire','plan','transit','approach','descend','close') and cancel_open):
             self.end_trial(clock,'cancelled','fresh human open held 0.7s before lift')
             self.enter('recover',clock,'grasp cancelled by sustained OPEN; adjust and pinch to retry')
             return TaskCommand('gripper_reference',finger=.044,owner='human_cancel_grasp')
@@ -396,7 +399,18 @@ class SharedGraspTask(DirectHumanTask):
                     self.open_since=None
                     self.message=f'PAYLOAD HOLD: keep still for {remaining:.1f}s before returning to source'
                     return TaskCommand('hold',finger=0.,owner='shared_collection_payload_hold')
-                self.collection_hold_complete=True;self.release_armed=True
+                release_reset=(self.hand_intent_valid and self.request_ratio is not None
+                    and np.isfinite(self.request_ratio) and self.request_ratio<self.config.open_ratio)
+                if not self.collection_hold_complete:
+                    self.collection_hold_complete=True;self.open_since=None
+                    self.collection_release_rearmed=release_reset
+                if not self.collection_release_rearmed:
+                    if release_reset:
+                        self.collection_release_rearmed=True;self.open_since=None
+                    else:
+                        self.message='HOLD COMPLETE: close or relax the hand once, then OPEN again to return the cube'
+                        return TaskCommand('hold',finger=0.,owner='shared_collection_wait_new_open')
+                self.release_armed=True
                 if self.confirmed_open(human,.35):
                     self.release_target=feedback.tcp.copy();self.release_target[2]=self.object_anchor[2]+.002
                     self.enter('lower',clock,'hold complete: return to source support before release')

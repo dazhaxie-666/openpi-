@@ -219,7 +219,7 @@ def scripted_input(task, feedback, clock, index):
                 point=task.human_anchor+(target-task.robot_anchor)/task.motion_gains
         elif phase=='transport':
             if task.collection_task_profile=='hold':
-                ratio=1.2 if task.collection_hold_complete else None
+                ratio=(1.2 if task.collection_release_rearmed else .15) if task.collection_hold_complete else None
             else:
                 # Exercise the live failure case: position stays available while
                 # fingers are unobserved, then OPEN requests placement directly.
@@ -407,7 +407,9 @@ def run(args, dataset_capture=None):
                     shared_interaction_version=7 if shared else None,
                     shared_segment_schema='full_task_v2' if shared else None,
                     shared_human_follow_scope='fixed image body wrist; continuously associated measured hand bridges shoulder loss; >0.35s hand gap needs body; no predicted landmarks' if shared else None,
-                    shared_gestures='natural OPEN during approach is remembered without preparation dwell; new in-range both 2D/3D PINCH held >=0.20s requests grasp; hidden/low target never starts automatic rise; OPEN held 0.7s cancels before lift; fresh post-handoff OPEN held 0.35s places, no repeat pinch' if shared else None,
+                    shared_gestures=(('new in-range both-channel PINCH held >=0.20s latches grasp/lift; pre-lift OPEN does not cancel; after the timed hold, only a NEW OPEN held 0.35s returns to source'
+                        if getattr(task,'collection_task_profile','pickplace')=='hold' else
+                        'natural OPEN during approach is remembered without preparation dwell; new in-range both 2D/3D PINCH held >=0.20s requests grasp; hidden/low target never starts automatic rise; OPEN held 0.7s cancels before lift; fresh post-handoff OPEN held 0.35s places, no repeat pinch')) if shared else None,
                     shared_payload_hold_scope='retain last checked servo target on payload hold/rejected carry; no encoder recapture drift; recoverable carry limits rebase; carry-only IK fallback <=8deg grasp attitude, <=4mm position error; B collision checks retained' if shared else None,
                     shared_place_scope='exact requested XY; lower IK fallback <=8deg grasp attitude and <=4mm position error; B support geometry and whole-path collision checks; rejected place returns human carry with 20mm relocation before retry; fixed release estimate <=6s for open-jaw vertical exit only' if shared else None,
                     shared_grasp_entry_scope='open approach remembered across range/view boundaries; no in-range OPEN gate; new >=0.20s both-channel pinch within 75mm cube surface; complete fresh RGB-D and 40mm center clearance required; hidden-view upward motion follows hand with 70mm bound and <=30s prior' if shared else None,
@@ -1087,7 +1089,9 @@ def run(args, dataset_capture=None):
                                 else 'HUMAN APPROACH' if task.phase=='manual' else 'HUMAN UPWARD CONTROL' if task.phase=='restore_view' else 'HUMAN CARRY' if task.phase=='transport'
                                 else 'ROBOT PLACE' if task.phase in ('lower','release','retract','verify') else 'ROBOT GRASP')
                             lines.append(f'CONTROL: {owner} | {task.phase.upper()} | EPISODE {shared_segments.episode_id}')
-                            lines.append('PINCH IN RANGE to grasp | OPEN 0.7s cancel before lift | OPEN 0.35s place')
+                            lines.append(('PINCH once to latch grasp | grip stays closed | NEW OPEN after 3s returns to source'
+                                if getattr(task,'collection_task_profile','pickplace')=='hold' else
+                                'PINCH IN RANGE to grasp | OPEN 0.7s cancel before lift | OPEN 0.35s place'))
                         if palm_yaw is not None:lines.append('WRIST: robot holds grasp angle; move hand to carry' if shared and task.phase!='manual' else
                             f'WRIST YAW {np.degrees(palm_yaw.yaw):+.0f} deg | {palm_yaw.state}: {palm_yaw.reason}')
                         if robot.ik_diagnostic.get('orientation_limited',False):lines.append('WRIST LIMIT: reduce turn or move to a roomier pose')

@@ -50,6 +50,10 @@ def shared_interaction_hint(task,feedback,clock,paused=False):
                 return cue('payload_timed_hold',numbered(f'采集中：保持方块不动，还剩 {remaining:.1f} 秒'),
                     'HOLD PAYLOAD STILL', '机械臂会自动保持；暂时不要移动手腕或张手', 'auto',
                     0. if required<=0 else 1.-remaining/required)
+            if not getattr(task,'collection_release_rearmed',True):
+                return cue('wait_new_open',numbered('采集中：夹爪持续闭合，等待一次新的张手'),
+                    'GRIP LATCHED - NEW OPEN REQUIRED',
+                    '如果已经提前张手，请先合手或放松，再重新张手；方块会一直保持夹紧','hold')
             progress=(0. if task.open_since is None or task.open_stamp is None else
                 float(np.clip((task.open_stamp-task.open_since)/.35,0.,1.)))
             if task.open_since is not None:

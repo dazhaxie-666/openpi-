@@ -78,6 +78,12 @@ class SharedTaskTests(unittest.TestCase):
         self.assertEqual(self.task.trials[-1]['status'],'cancelled')
         self.assertIn(self.task.phase,('recover','manual'))
 
+    def test_hold_profile_latches_grasp_request_when_human_relaxes_pinch(self):
+        self.task.collection_task_profile='hold';self.request()
+        for _ in range(16):cmd=self.tick(1.2)
+        self.assertNotEqual(self.task.trials[-1]['status'],'cancelled')
+        self.assertNotEqual(self.task.phase,'recover')
+
     def test_missing_wrist_while_carrying_holds_grip_and_open_requests_lowering(self):
         self.request();self.task.grasp_confirmed=True;self.fb.gripping=True
         self.task.enter('transport',self.i*.05,'fixture')
