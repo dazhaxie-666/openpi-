@@ -1,0 +1,6 @@
+# RL training / demo additions — install into Isaac Lab's Python environment.
+# Isaac Lab must be installed first: https://isaac-sim.github.io/IsaacLab/
+# Usage: ~/IsaacLab/isaaclab.sh -p -m pip install -r requirements-rl.txt
+skrl>=2.1.0
+scipy>=1.15.3
+opencv-python>=4.11.0

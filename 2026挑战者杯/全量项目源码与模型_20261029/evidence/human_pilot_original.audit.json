@@ -1,0 +1,104 @@
+{
+  "schema": "openarm_dataset_audit_v1",
+  "session": "D:\\openpi\\dataset\\raw\\openarm_grasp_hold_return_p01_pilot5_v1\\batch_003\\20261028_224044_492025_383f2e",
+  "dataset_name": "openarm_grasp_hold_return_p01_pilot5_v1",
+  "stage": "pilot",
+  "task_profile": "hold",
+  "batch_id": 3,
+  "batch_name": "batch_003",
+  "synthetic_input": false,
+  "training_allowed": false,
+  "recording_digest": "7fd1679b44c669e4c533e47c42eab136f971f0915c7ced933ee121ecbcc94633",
+  "quality_contract_digest": "055440ed6b598a4c877614a42b7aedf9b5fffc5d2916da7fd66c251b06f51033",
+  "raw_action_replay_verified": false,
+  "recording_valid": true,
+  "structural_errors": [],
+  "structural_warnings": [
+    "continuous direct session may include retries; review/segment successful demonstrations before training",
+    "shared autonomy: use eligible per-trial segments, not the complete session or unassisted-human labels"
+  ],
+  "trials": [
+    {
+      "trial_id": 1,
+      "status": "completed",
+      "start_frame": 40,
+      "end_frame_exclusive": 2201,
+      "duration_s": 83.77294929999971,
+      "physical_success": true,
+      "issues": [],
+      "motion": {
+        "manual_duration_s": 72.49511849999999,
+        "target_joint_speed_p95_rad_s": 0.49132437968547804,
+        "target_joint_speed_max_rad_s": 1.5158450390203506,
+        "reversal_frames": 527,
+        "reversal_frames_per_minute": 436.1672986299071,
+        "manual_warning_fraction": 0.006944444444444444,
+        "review_flags": [
+          "manual target speed spike; inspect wrist and arm video",
+          "frequent manual target reversals; inspect before accepting"
+        ],
+        "scope": "manual/transport accepted-target heuristic; not ground-truth human tremor"
+      },
+      "cameras": {
+        "chest_d435i_preview": {
+          "frames": 838,
+          "achieved_hz": 9.995500150029823,
+          "max_gap_s": 0.16162750000057713
+        },
+        "v22_right_d405_rgb": {
+          "frames": 838,
+          "achieved_hz": 9.995500150029823,
+          "max_gap_s": 0.16162750000057713
+        }
+      },
+      "max_control_gap_s": 0.10244260000035865,
+      "initial_goal_distance_m": 0.09999997931790412,
+      "candidate": true,
+      "needs_visual_review": true,
+      "training_approved": false
+    },
+    {
+      "trial_id": 2,
+      "status": "completed",
+      "start_frame": 2289,
+      "end_frame_exclusive": 4233,
+      "duration_s": 75.54896780000036,
+      "physical_success": true,
+      "issues": [],
+      "motion": {
+        "manual_duration_s": 64.09587680000004,
+        "target_joint_speed_p95_rad_s": 0.42718366565022164,
+        "target_joint_speed_max_rad_s": 1.8318372545155779,
+        "reversal_frames": 449,
+        "reversal_frames_per_minute": 420.3078473216234,
+        "manual_warning_fraction": 0.0012143290831815423,
+        "review_flags": [
+          "manual target speed spike; inspect wrist and arm video",
+          "frequent manual target reversals; inspect before accepting"
+        ],
+        "scope": "manual/transport accepted-target heuristic; not ground-truth human tremor"
+      },
+      "cameras": {
+        "chest_d435i_preview": {
+          "frames": 756,
+          "achieved_hz": 9.997994746555637,
+          "max_gap_s": 0.14711389999956737
+        },
+        "v22_right_d405_rgb": {
+          "frames": 756,
+          "achieved_hz": 9.997994746555637,
+          "max_gap_s": 0.14711389999956737
+        }
+      },
+      "max_control_gap_s": 0.1002373000001171,
+      "initial_goal_distance_m": 0.10000002169832428,
+      "candidate": true,
+      "needs_visual_review": true,
+      "training_approved": false
+    }
+  ],
+  "physical_success_segments": 2,
+  "candidate_successes": 2,
+  "training_approved_successes": 0,
+  "scope": "task-profile-aware candidates require visual review; synthetic/pilot/evaluation excluded from training"
+}

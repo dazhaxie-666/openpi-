@@ -1,0 +1,414 @@
+<?xml version="1.0"?>
+<!--
+OpenArm v2.0 dual-arm core for ROS2 + Gazebo Ignition/gz.
+
+The arm joint origins, axes, limits, inertials, and meshes are copied from
+/home/ang/openarm_ws/src/openarm_description/assets/robot/openarm_v2.0.
+The pinch gripper is intentionally removed; link7 is kept as the real arm tip
+frame and a small tool0 marker is fixed at the upstream ee_mount_point.
+The torso/head are simplified display geometry; both arms use OpenArm v2.0
+single-axis revolute joints.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="openarm_dual_arm">
+  <xacro:property name="PI" value="3.141592653589793" />
+  <xacro:property name="mesh_root" value="file://$(find pose2arm)/gazebo_openarm/meshes/arm" />
+  <xacro:property name="body_mesh_root" value="file://$(find pose2arm)/gazebo_openarm/meshes/body" />
+  <!-- Official OpenArm v2.0 bimanual body reference points are y=+/-0.031 m. -->
+  <xacro:property name="shoulder_span" value="0.062" />
+  <xacro:property name="shoulder_half_span" value="${shoulder_span / 2.0}" />
+
+  <xacro:macro name="box_inertial" params="mass x y z">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="${mass}" />
+      <inertia
+        ixx="${mass * (y*y + z*z) / 12.0}" ixy="0" ixz="0"
+        iyy="${mass * (x*x + z*z) / 12.0}" iyz="0"
+        izz="${mass * (x*x + y*y) / 12.0}" />
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="mesh_link" params="name source mass ixx ixy ixz iyy iyz izz cx cy cz scale_y:=1">
+    <link name="${name}">
+      <visual name="${name}_visual">
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh filename="${mesh_root}/visual/${source}.dae" scale="1 ${scale_y} 1" />
+        </geometry>
+        <material name="${name}_material">
+          <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+        </material>
+      </visual>
+      <collision name="${name}_collision">
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <geometry>
+          <mesh filename="${mesh_root}/collision/${source}.stl" scale="1 1 1" />
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="${cx} ${scale_y * cy} ${cz}" rpy="0 0 0" />
+        <mass value="${mass}" />
+        <inertia ixx="${ixx}" ixy="${scale_y * ixy}" ixz="${ixz}" iyy="${iyy}" iyz="${scale_y * iyz}" izz="${izz}" />
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <xacro:macro name="display_arm_link" params="name length radius mass color">
+    <link name="${name}">
+      <visual>
+        <origin xyz="0 0 ${-length / 2.0}" rpy="0 0 0" />
+        <geometry><cylinder radius="${radius}" length="${length}" /></geometry>
+        <material name="${color}" />
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${-length / 2.0}" rpy="0 0 0" />
+        <geometry><cylinder radius="${radius}" length="${length}" /></geometry>
+      </collision>
+      <xacro:box_inertial mass="${mass}" x="${2.0 * radius}" y="${2.0 * radius}" z="${length}" />
+    </link>
+  </xacro:macro>
+
+  <material name="openarm_dark"><color rgba="0.12 0.14 0.16 1.0" /></material>
+  <material name="openarm_blue"><color rgba="0.10 0.35 0.80 1.0" /></material>
+  <material name="openarm_light"><color rgba="0.82 0.86 0.88 1.0" /></material>
+  <material name="openarm_skin"><color rgba="0.72 0.76 0.78 1.0" /></material>
+  <material name="openarm_black"><color rgba="0.02 0.02 0.02 1.0" /></material>
+  <material name="openarm_front"><color rgba="0.95 0.12 0.08 1.0" /></material>
+  <material name="openarm_neon"><color rgba="0.00 0.85 1.00 1.0" /></material>
+  <material name="openarm_lime"><color rgba="0.40 1.00 0.20 1.0" /></material>
+
+  <link name="world" />
+
+  <link name="openarm_display_base_link" />
+
+  <joint name="world_to_openarm_display_base" type="fixed">
+    <parent link="world" />
+    <child link="openarm_display_base_link" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+
+  <link name="openarm_torso_link" />
+
+  <joint name="display_base_to_torso" type="fixed">
+    <parent link="openarm_display_base_link" />
+    <child link="openarm_torso_link" />
+    <origin xyz="0 0 0.10" rpy="0 0 0" />
+  </joint>
+
+  <link name="openarm_shoulder_bar_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="${PI / 2.0} 0 0" />
+      <geometry><cylinder radius="0.045" length="${shoulder_span}" /></geometry>
+      <material name="openarm_blue" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="${PI / 2.0} 0 0" />
+      <geometry><cylinder radius="0.045" length="${shoulder_span}" /></geometry>
+    </collision>
+    <xacro:box_inertial mass="1.0" x="0.09" y="${shoulder_span}" z="0.09" />
+  </link>
+
+  <joint name="torso_to_shoulder_bar" type="fixed">
+    <parent link="openarm_torso_link" />
+    <child link="openarm_shoulder_bar_link" />
+    <origin xyz="0 0 0.88" rpy="0 0 0" />
+  </joint>
+
+  <link name="openarm_head_link">
+    <visual name="official_openarm_body_visual">
+      <!-- Upstream OpenArm v2.0 has no separate head mesh. This visual uses
+           body_link0.dae and aligns its official arm mount height (z=0.698)
+           with this demo's shoulder bar (z=0.88 in torso frame). It is visual
+           only: no body collision is added, so arm motion remains unobstructed. -->
+      <origin xyz="0 0 0.182" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="${body_mesh_root}/visual/body_link0.dae" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+  </link>
+
+  <joint name="torso_to_head" type="fixed">
+    <parent link="openarm_torso_link" />
+    <child link="openarm_head_link" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+
+  <xacro:mesh_link name="openarm_left_base_link" source="base_link"
+    mass="1.1432284943239561"
+    ixx="0.00113607806226198" ixy="3.81487993180929e-07" ixz="1.09161247709715e-08"
+    iyy="0.00159935208714031" iyz="2.7521421737084e-08" izz="0.000750541980863571"
+    cx="0.00253123748061566" cy="-0.0258185540330169" cz="2.70658291858903e-05" scale_y="-1" />
+  <xacro:mesh_link name="openarm_left_link1" source="link1"
+    mass="1.1416684646202298"
+    ixx="0.0010943212038551" ixy="9.41628673674543e-06" ixz="4.53422182483102e-08"
+    iyy="0.000759199728161993" iyz="6.66755698859637e-08" izz="0.000670659201019629"
+    cx="0.000900350355624244" cy="-0.0444659716892874" cz="2.88441021165683e-05" scale_y="-1" />
+  <xacro:mesh_link name="openarm_left_link2" source="link2"
+    mass="0.2775092746011571"
+    ixx="0.000153588833784759" ixy="-2.94422592188677e-10" ixz="5.21056076779068e-06"
+    iyy="0.000113062180225725" iyz="3.75816911469744e-10" izz="8.22999351863579e-05"
+    cx="-0.0247184924346635" cy="7.60578399428002e-08" cz="-0.0312643102292087" scale_y="-1" />
+  <xacro:mesh_link name="openarm_left_link3" source="link3"
+    mass="1.073863338202347"
+    ixx="0.00128939636591746" ixy="-2.29951046666492e-07" ixz="-6.76161926984358e-05"
+    iyy="0.00114018992179734" iyz="-1.06260802872572e-05" izz="0.000559765478676303"
+    cx="-0.00300861804638783" cy="-0.000514813312550808" cz="-0.109368241429434" />
+  <xacro:mesh_link name="openarm_left_link4" source="link4"
+    mass="0.6348534566833373"
+    ixx="0.0004690036047182" ixy="5.63626910265645e-06" ixz="-1.77877991597693e-06"
+    iyy="0.000433926270522842" iyz="3.41757797773822e-06" izz="0.000245211429759716"
+    cx="-0.00310326243752606" cy="-0.00136538979048502" cz="-0.0574601379354351" />
+  <xacro:mesh_link name="openarm_left_link5" source="link5"
+    mass="0.6156588026168502"
+    ixx="0.000279653368752989" ixy="3.31745289972445e-06" ixz="7.68097311403736e-07"
+    iyy="0.000334599623120095" iyz="-1.49934409279756e-07" izz="0.000176662464388138"
+    cx="-0.000737188580130584" cy="-0.000412406544351845" cz="-0.047093829077211" scale_y="-1" />
+  <xacro:mesh_link name="openarm_left_link6" source="link6"
+    mass="0.475202773187987"
+    ixx="0.000179275941446964" ixy="6.58439346712228e-08" ixz="-3.37101167120887e-08"
+    iyy="0.000136247512758587" iyz="3.32253600295544e-08" izz="0.000135340695937386"
+    cx="2.27438423593244e-05" cy="0.00068649602098908" cz="5.44000494765995e-05" scale_y="-1" />
+
+  <link name="openarm_left_link7">
+    <visual>
+      <origin xyz="0.01025 0 0" rpy="0 ${PI / 2.0} 0" />
+      <geometry><cylinder radius="0.028" length="0.0205" /></geometry>
+      <material name="openarm_blue" />
+    </visual>
+    <collision>
+      <origin xyz="0.01025 0 0" rpy="0 ${PI / 2.0} 0" />
+      <geometry><cylinder radius="0.028" length="0.0205" /></geometry>
+    </collision>
+    <xacro:box_inertial mass="0.05" x="0.0205" y="0.056" z="0.056" />
+  </link>
+
+  <link name="openarm_left_tool0">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><sphere radius="0.035" /></geometry>
+      <material name="openarm_dark" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><sphere radius="0.035" /></geometry>
+    </collision>
+    <xacro:box_inertial mass="0.05" x="0.07" y="0.07" z="0.07" />
+  </link>
+
+  <joint name="left_arm_mount_joint" type="fixed">
+    <parent link="openarm_shoulder_bar_link" />
+    <child link="openarm_left_base_link" />
+    <origin xyz="0 ${shoulder_half_span} 0" rpy="0 0 0" />
+  </joint>
+
+  <joint name="openarm_left_joint1" type="revolute">
+    <origin xyz="0 0.0625 0" rpy="0 0 0" />
+    <parent link="openarm_left_base_link" />
+    <child link="openarm_left_link1" />
+    <axis xyz="0 1 0" />
+    <limit lower="-3.4907" upper="1.3963" effort="40" velocity="16.755" />
+  </joint>
+  <joint name="openarm_left_joint2" type="revolute">
+    <origin xyz="0 0.0600000000000001 0" rpy="0 0 0" />
+    <parent link="openarm_left_link1" />
+    <child link="openarm_left_link2" />
+    <axis xyz="-1 0 0" />
+    <limit lower="-3.3161" upper="0.17453" effort="40" velocity="16.755" />
+  </joint>
+  <joint name="openarm_left_joint3" type="revolute">
+    <origin xyz="0 0 -0.0662500000000008" rpy="0 0 0" />
+    <parent link="openarm_left_link2" />
+    <child link="openarm_left_link3" />
+    <axis xyz="0 0 -1" />
+    <limit lower="-1.5708" upper="1.5708" effort="27" velocity="5.4454" />
+  </joint>
+  <joint name="openarm_left_joint4" type="revolute">
+    <origin xyz="0 0 -0.15375" rpy="0 0 0" />
+    <parent link="openarm_left_link3" />
+    <child link="openarm_left_link4" />
+    <axis xyz="0 -1 0" />
+    <limit lower="0" upper="2.4435" effort="27" velocity="5.4454" />
+  </joint>
+  <joint name="openarm_left_joint5" type="revolute">
+    <origin xyz="0 0 -0.0955000000000005" rpy="0 0 0" />
+    <parent link="openarm_left_link4" />
+    <child link="openarm_left_link5" />
+    <axis xyz="0 0 -1" />
+    <limit lower="-1.5708" upper="1.5708" effort="7" velocity="20.944" />
+  </joint>
+  <joint name="openarm_left_joint6" type="revolute">
+    <origin xyz="0 0 -0.120499999999998" rpy="0 0 0" />
+    <parent link="openarm_left_link5" />
+    <child link="openarm_left_link6" />
+    <axis xyz="0 -1 0" />
+    <limit lower="-0.7854" upper="0.7854" effort="7" velocity="20.944" />
+  </joint>
+  <joint name="openarm_left_joint7" type="revolute">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="openarm_left_link6" />
+    <child link="openarm_left_link7" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.7854" upper="0.7854" effort="7" velocity="20.944" />
+  </joint>
+
+  <joint name="openarm_left_tool0_fixed" type="fixed">
+    <parent link="openarm_left_link7" />
+    <child link="openarm_left_tool0" />
+    <origin xyz="0.0205 0 0" rpy="0 0 0" />
+  </joint>
+
+  <xacro:mesh_link name="openarm_right_base_link" source="base_link"
+    mass="1.1432284943239561"
+    ixx="0.00113607806226198" ixy="3.81487993180929e-07" ixz="1.09161247709715e-08"
+    iyy="0.00159935208714031" iyz="2.7521421737084e-08" izz="0.000750541980863571"
+    cx="0.00253123748061566" cy="-0.0258185540330169" cz="2.70658291858903e-05" />
+  <xacro:mesh_link name="openarm_right_link1" source="link1"
+    mass="1.1416684646202298"
+    ixx="0.0010943212038551" ixy="9.41628673674543e-06" ixz="4.53422182483102e-08"
+    iyy="0.000759199728161993" iyz="6.66755698859637e-08" izz="0.000670659201019629"
+    cx="0.000900350355624244" cy="-0.0444659716892874" cz="2.88441021165683e-05" />
+  <xacro:mesh_link name="openarm_right_link2" source="link2"
+    mass="0.2775092746011571"
+    ixx="0.000153588833784759" ixy="-2.94422592188677e-10" ixz="5.21056076779068e-06"
+    iyy="0.000113062180225725" iyz="3.75816911469744e-10" izz="8.22999351863579e-05"
+    cx="-0.0247184924346635" cy="7.60578399428002e-08" cz="-0.0312643102292087" />
+  <xacro:mesh_link name="openarm_right_link3" source="link3"
+    mass="1.073863338202347"
+    ixx="0.00128939636591746" ixy="-2.29951046666492e-07" ixz="-6.76161926984358e-05"
+    iyy="0.00114018992179734" iyz="-1.06260802872572e-05" izz="0.000559765478676303"
+    cx="-0.00300861804638783" cy="-0.000514813312550808" cz="-0.109368241429434" />
+  <xacro:mesh_link name="openarm_right_link4" source="link4"
+    mass="0.6348534566833373"
+    ixx="0.0004690036047182" ixy="5.63626910265645e-06" ixz="-1.77877991597693e-06"
+    iyy="0.000433926270522842" iyz="3.41757797773822e-06" izz="0.000245211429759716"
+    cx="-0.00310326243752606" cy="-0.00136538979048502" cz="-0.0574601379354351" />
+  <xacro:mesh_link name="openarm_right_link5" source="link5"
+    mass="0.6156588026168502"
+    ixx="0.000279653368752989" ixy="3.31745289972445e-06" ixz="7.68097311403736e-07"
+    iyy="0.000334599623120095" iyz="-1.49934409279756e-07" izz="0.000176662464388138"
+    cx="-0.000737188580130584" cy="-0.000412406544351845" cz="-0.047093829077211" />
+  <xacro:mesh_link name="openarm_right_link6" source="link6"
+    mass="0.475202773187987"
+    ixx="0.000179275941446964" ixy="6.58439346712228e-08" ixz="-3.37101167120887e-08"
+    iyy="0.000136247512758587" iyz="3.32253600295544e-08" izz="0.000135340695937386"
+    cx="2.27438423593244e-05" cy="0.00068649602098908" cz="5.44000494765995e-05" />
+
+  <link name="openarm_right_link7">
+    <visual>
+      <origin xyz="0.01025 0 0" rpy="0 ${PI / 2.0} 0" />
+      <geometry><cylinder radius="0.028" length="0.0205" /></geometry>
+      <material name="openarm_blue" />
+    </visual>
+    <collision>
+      <origin xyz="0.01025 0 0" rpy="0 ${PI / 2.0} 0" />
+      <geometry><cylinder radius="0.028" length="0.0205" /></geometry>
+    </collision>
+    <xacro:box_inertial mass="0.05" x="0.0205" y="0.056" z="0.056" />
+  </link>
+
+  <link name="openarm_right_tool0">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><sphere radius="0.035" /></geometry>
+      <material name="openarm_dark" />
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><sphere radius="0.035" /></geometry>
+    </collision>
+    <xacro:box_inertial mass="0.05" x="0.07" y="0.07" z="0.07" />
+  </link>
+
+  <joint name="right_arm_mount_joint" type="fixed">
+    <parent link="openarm_shoulder_bar_link" />
+    <child link="openarm_right_base_link" />
+    <origin xyz="0 ${-shoulder_half_span} 0" rpy="0 0 0" />
+  </joint>
+
+  <joint name="openarm_right_joint1" type="revolute">
+    <origin xyz="0 -0.0625 0" rpy="0 0 0" />
+    <parent link="openarm_right_base_link" />
+    <child link="openarm_right_link1" />
+    <axis xyz="0 -1 0" />
+    <limit lower="-1.3963" upper="3.4907" effort="40" velocity="16.755" />
+  </joint>
+  <joint name="openarm_right_joint2" type="revolute">
+    <origin xyz="0 -0.0600000000000001 0" rpy="0 0 0" />
+    <parent link="openarm_right_link1" />
+    <child link="openarm_right_link2" />
+    <axis xyz="-1 0 0" />
+    <limit lower="-0.17453" upper="3.3161" effort="40" velocity="16.755" />
+  </joint>
+  <joint name="openarm_right_joint3" type="revolute">
+    <origin xyz="0 0 -0.0662500000000008" rpy="0 0 0" />
+    <parent link="openarm_right_link2" />
+    <child link="openarm_right_link3" />
+    <axis xyz="0 0 -1" />
+    <limit lower="-1.5708" upper="1.5708" effort="27" velocity="5.4454" />
+  </joint>
+  <joint name="openarm_right_joint4" type="revolute">
+    <origin xyz="0 0 -0.15375" rpy="0 0 0" />
+    <parent link="openarm_right_link3" />
+    <child link="openarm_right_link4" />
+    <axis xyz="0 -1 0" />
+    <limit lower="0" upper="2.4435" effort="27" velocity="5.4454" />
+  </joint>
+  <joint name="openarm_right_joint5" type="revolute">
+    <origin xyz="0 0 -0.0955000000000005" rpy="0 0 0" />
+    <parent link="openarm_right_link4" />
+    <child link="openarm_right_link5" />
+    <axis xyz="0 0 -1" />
+    <limit lower="-1.5708" upper="1.5708" effort="7" velocity="20.944" />
+  </joint>
+  <joint name="openarm_right_joint6" type="revolute">
+    <origin xyz="0 0 -0.120499999999998" rpy="0 0 0" />
+    <parent link="openarm_right_link5" />
+    <child link="openarm_right_link6" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.7854" upper="0.7854" effort="7" velocity="20.944" />
+  </joint>
+  <joint name="openarm_right_joint7" type="revolute">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="openarm_right_link6" />
+    <child link="openarm_right_link7" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.7854" upper="0.7854" effort="7" velocity="20.944" />
+  </joint>
+
+  <joint name="openarm_right_tool0_fixed" type="fixed">
+    <parent link="openarm_right_link7" />
+    <child link="openarm_right_tool0" />
+    <origin xyz="0.0205 0 0" rpy="0 0 0" />
+  </joint>
+
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware><plugin>gz_ros2_control/GazeboSimSystem</plugin></hardware>
+    <xacro:macro name="arm_joint_interface" params="name">
+      <joint name="${name}">
+        <command_interface name="position" />
+        <state_interface name="position" />
+        <state_interface name="velocity" />
+      </joint>
+    </xacro:macro>
+    <xacro:arm_joint_interface name="openarm_right_joint1" />
+    <xacro:arm_joint_interface name="openarm_right_joint2" />
+    <xacro:arm_joint_interface name="openarm_right_joint3" />
+    <xacro:arm_joint_interface name="openarm_right_joint4" />
+    <xacro:arm_joint_interface name="openarm_right_joint5" />
+    <xacro:arm_joint_interface name="openarm_right_joint6" />
+    <xacro:arm_joint_interface name="openarm_right_joint7" />
+    <xacro:arm_joint_interface name="openarm_left_joint1" />
+    <xacro:arm_joint_interface name="openarm_left_joint2" />
+    <xacro:arm_joint_interface name="openarm_left_joint3" />
+    <xacro:arm_joint_interface name="openarm_left_joint4" />
+    <xacro:arm_joint_interface name="openarm_left_joint5" />
+    <xacro:arm_joint_interface name="openarm_left_joint6" />
+    <xacro:arm_joint_interface name="openarm_left_joint7" />
+  </ros2_control>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find pose2arm)/gazebo_openarm/config/openarm_controllers.yaml</parameters>
+    </plugin>
+  </gazebo>
+</robot>

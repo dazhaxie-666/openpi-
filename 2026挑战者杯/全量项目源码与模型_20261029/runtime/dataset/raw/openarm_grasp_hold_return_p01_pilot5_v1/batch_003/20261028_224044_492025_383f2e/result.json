@@ -1,0 +1,605 @@
+{
+  "verdict": "PASS",
+  "control_mode": "direct",
+  "controller_stage": "finished",
+  "reason": "operator_finished",
+  "error": null,
+  "calibration_error": null,
+  "input_source": "live_usb",
+  "synthetic_input": false,
+  "human_validation_performed": true,
+  "human_task_success": true,
+  "scope": "human intent + B RGB-D grasp/lift/3s hold/source return; automatic per-trial labels; no trained policy",
+  "elapsed_task_s": 164.35110769999937,
+  "task_clock": "active wall time",
+  "meets_15s_limit": false,
+  "frames": 4292,
+  "evaluation": {
+    "scope": "Independent physics: at least one completed shared trial; per-trial labels in shared_trials.json",
+    "max_lift_m": 0.06300370602411098,
+    "sustained_lift_s": 6.509999999999112,
+    "stable_payload_hold_s": 5.103499999999891,
+    "stable_released_in_goal_s": 0.0,
+    "stable_released_at_source_s": 1.8009999999998572,
+    "source_return_error_m": 0.005179731429832117,
+    "source_return_tolerance_m": 0.03,
+    "task_profile": "hold",
+    "required_payload_hold_s": 3.0,
+    "physical_task_success": true
+  },
+  "events": [
+    {
+      "time_s": 5.625062099999923,
+      "previous": "ready",
+      "stage": "direct",
+      "reason": "human_direct_start"
+    },
+    {
+      "time_s": 9.31952899999942,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 10.514528400000017,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_right_left_finger_collision', 'droid_object_geom'], 'depth_m': 0.0005547359948480565, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 23.17423449999933,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_open"
+    },
+    {
+      "time_s": 31.010904400000072,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 44.25401939999938,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_open"
+    },
+    {
+      "time_s": 45.64452230000006,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 56.717999299999974,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_open"
+    },
+    {
+      "time_s": 57.50984679999965,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0010251027197994735, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 57.65686399999959,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0014450010611969078, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 57.9852721999996,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0015803047286151424, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 58.093793499999265,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0009844184946920904, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 58.197140899999795,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0008654842517767461, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 58.328929499999504,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0008332111064383156, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 58.518955199999255,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0007526453006211592, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 58.72529570000006,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0008787449601917227, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 58.79150750000008,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 58.79150750000008,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0008956403345762043, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 59.62397710000005,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_link6_collision'], 'depth_m': 0.0008484984576821281, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 60.75561939999989,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_right_left_finger_collision', 'droid_object_geom'], 'depth_m': 0.0006056227729904296, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 61.23911059999955,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_grip:[{'geoms': ['openarm_right_left_finger_collision', 'droid_object_geom'], 'depth_m': 0.001980120527457143, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 68.24936230000003,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_open"
+    },
+    {
+      "time_s": 71.54226190000009,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 72.27072809999936,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_open"
+    },
+    {
+      "time_s": 72.98380289999932,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 73.09481289999985,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_plan",
+      "trial_id": 1,
+      "detail": "New in-range pinch confirmed by 2D/3D hand input: planning"
+    },
+    {
+      "time_s": 73.82548749999933,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_approach",
+      "trial_id": 1,
+      "detail": "Plan ready: direct safe approach"
+    },
+    {
+      "time_s": 75.55178350000006,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_descend",
+      "trial_id": 1,
+      "detail": "B reached approach"
+    },
+    {
+      "time_s": 76.72685149999961,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_close",
+      "trial_id": 1,
+      "detail": "B reached descend"
+    },
+    {
+      "time_s": 79.05164519999926,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_lift",
+      "trial_id": 1,
+      "detail": "Grip confirmed: lifting"
+    },
+    {
+      "time_s": 80.59338919999936,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_transport",
+      "trial_id": 1,
+      "detail": "Lift complete: move your hand to carry"
+    },
+    {
+      "time_s": 85.69571209999958,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_lower",
+      "trial_id": 1,
+      "detail": "hold complete: return to source support before release"
+    },
+    {
+      "time_s": 87.0831006999997,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_release",
+      "trial_id": 1,
+      "detail": "support height reached; unload and open jaws"
+    },
+    {
+      "time_s": 87.59560229999988,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_retract",
+      "trial_id": 1,
+      "detail": "jaws open; retract before next trial"
+    },
+    {
+      "time_s": 88.84499159999996,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_verify",
+      "trial_id": 1,
+      "detail": "camera checks supported placement"
+    },
+    {
+      "time_s": 89.39801139999963,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_manual",
+      "trial_id": 1,
+      "detail": "Trial recorded; open then pinch for next try. Q saves session"
+    },
+    {
+      "time_s": 89.39801139999963,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "collection_scene_reset",
+      "trial_id": 1,
+      "reset_count": 1
+    },
+    {
+      "time_s": 89.43147369999951,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_reset",
+      "trial_id": 1,
+      "detail": "Trial recorded; protected operator reset time"
+    },
+    {
+      "time_s": 92.40746539999964,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_manual",
+      "trial_id": 1,
+      "detail": "Reset complete; approach the cube with an open hand, then pinch to start"
+    },
+    {
+      "time_s": 97.1185717999997,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_open"
+    },
+    {
+      "time_s": 112.25302179999926,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_right_left_finger_collision', 'droid_object_geom'], 'depth_m': 0.003257032173995643, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 121.14816809999957,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "task_motion_collision_rejected:direct_move:[{'geoms': ['openarm_left_left_finger_collision', 'openarm_right_right_finger_collision'], 'depth_m': 0.0011152520068588572, 'baseline_m': 0.0}]",
+      "recoverable": true
+    },
+    {
+      "time_s": 136.80832740000005,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 140.97990779999964,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_open"
+    },
+    {
+      "time_s": 142.17065759999969,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "human_direct_close"
+    },
+    {
+      "time_s": 142.28374780000013,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_plan",
+      "trial_id": 2,
+      "detail": "New in-range pinch confirmed by 2D/3D hand input: planning"
+    },
+    {
+      "time_s": 143.01892319999934,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_approach",
+      "trial_id": 2,
+      "detail": "Plan ready: direct safe approach"
+    },
+    {
+      "time_s": 144.78964839999935,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_descend",
+      "trial_id": 2,
+      "detail": "B reached approach"
+    },
+    {
+      "time_s": 146.01740459999928,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_close",
+      "trial_id": 2,
+      "detail": "B reached descend"
+    },
+    {
+      "time_s": 148.32472919999964,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_lift",
+      "trial_id": 2,
+      "detail": "Grip confirmed: lifting"
+    },
+    {
+      "time_s": 149.88464059999933,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_transport",
+      "trial_id": 2,
+      "detail": "Lift complete: move your hand to carry"
+    },
+    {
+      "time_s": 164.1930171999993,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_lower",
+      "trial_id": 2,
+      "detail": "hold complete: return to source support before release"
+    },
+    {
+      "time_s": 165.67171719999988,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_release",
+      "trial_id": 2,
+      "detail": "support height reached; unload and open jaws"
+    },
+    {
+      "time_s": 166.18468979999943,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_retract",
+      "trial_id": 2,
+      "detail": "jaws open; retract before next trial"
+    },
+    {
+      "time_s": 167.41319359999943,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_verify",
+      "trial_id": 2,
+      "detail": "camera checks supported placement"
+    },
+    {
+      "time_s": 167.9564332,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_manual",
+      "trial_id": 2,
+      "detail": "Trial recorded; open then pinch for next try. Q saves session"
+    },
+    {
+      "time_s": 167.98999419999927,
+      "previous": "direct",
+      "stage": "direct",
+      "reason": "shared_phase_session_complete",
+      "trial_id": 2,
+      "detail": "Final trial recorded; saving collection"
+    },
+    {
+      "time_s": 169.9761697999993,
+      "previous": "direct",
+      "stage": "finished",
+      "reason": "operator_finished"
+    }
+  ],
+  "runtime": {
+    "frames": 4292,
+    "host_elapsed_s": 165.7066969,
+    "sim_elapsed_s": 165.70349999943625,
+    "achieved_control_hz": 25.895151374536873,
+    "realtime_factor": 0.9999807074751742,
+    "control_work_ms_p50": 32.379499999933614,
+    "control_work_ms_p95": 55.473095000434114,
+    "overrun_rows": 2007,
+    "configured_control_hz": 30.0,
+    "unserved_wall_s": 0.5919145000003483,
+    "latency_scope": "host control loop; no exposure-to-motion or human accuracy claim"
+  },
+  "grasp_plans": [
+    {
+      "center": [
+        0.43433854859360393,
+        5.7832253220365315e-05,
+        0.4293
+      ],
+      "raw_camera_center": [
+        0.43433854859360393,
+        5.7832253220365315e-05,
+        0.4286989117016127
+      ],
+      "support_plane_constraint": true,
+      "yaw": 0.5253828937915701,
+      "metrics": {
+        "face_index": 1,
+        "sign": 1.0,
+        "downward_weight": 0.8,
+        "direction": [
+          -0.501544295089815,
+          0.8651319668483303,
+          0.0
+        ],
+        "score": 0.03527955214983742,
+        "max_new_penetration_mm": 0.0,
+        "distal_down_cosine": 0.9683324976629617,
+        "midpoint_error_m": 0.0008406499478823771,
+        "perpendicular_error_m": 0.00537461053420273,
+        "separation_m": 0.09863112542275823
+      },
+      "planning_s": 0.6798932000001514,
+      "worker": "B camera/encoder snapshot",
+      "entry_stage": "approach",
+      "encoder_conditioned_object_estimate": {
+        "center": [
+          0.434056256081532,
+          0.0005688768833133519,
+          0.4308675312798793
+        ],
+        "rotation": [
+          [
+            0.8753335284226478,
+            -0.482760931389981,
+            0.02707576670448561
+          ],
+          [
+            0.4835196107906666,
+            0.8739600628962801,
+            -0.04901626712809085
+          ],
+          [
+            -3.469446951953614e-18,
+            0.05599724623415058,
+            0.9984309232061034
+          ]
+        ]
+      }
+    },
+    {
+      "center": [
+        0.4342682785486666,
+        0.00011209355880039827,
+        0.4293
+      ],
+      "raw_camera_center": [
+        0.4342682785486666,
+        0.00011209355880039827,
+        0.4286985563921372
+      ],
+      "support_plane_constraint": true,
+      "yaw": 0.5229143431981484,
+      "metrics": {
+        "face_index": 1,
+        "sign": 1.0,
+        "downward_weight": 0.8,
+        "direction": [
+          -0.4994071470886512,
+          0.8663674171139947,
+          0.0
+        ],
+        "score": 0.0356470816291915,
+        "max_new_penetration_mm": 0.0,
+        "distal_down_cosine": 0.9700538909635213,
+        "midpoint_error_m": 0.0008164160143381867,
+        "perpendicular_error_m": 0.005496584297161927,
+        "separation_m": 0.09862440317496703
+      },
+      "planning_s": 0.6657463999999891,
+      "worker": "B camera/encoder snapshot",
+      "entry_stage": "approach",
+      "encoder_conditioned_object_estimate": {
+        "center": [
+          0.4340461773551953,
+          0.0005103323708249327,
+          0.4309618539558229
+        ],
+        "rotation": [
+          [
+            0.8733578371289296,
+            -0.4862169572555359,
+            0.02896823782432376
+          ],
+          [
+            0.4870791396944424,
+            0.8718118998700964,
+            -0.05194153366444511
+          ],
+          [
+            0.0,
+            0.05947336985627489,
+            0.9982298924986862
+          ]
+        ]
+      }
+    }
+  ],
+  "placement_plans": [
+    {
+      "requested_tcp": [
+        0.4318943497766481,
+        -0.00045792867572822665,
+        0.4306989117016127
+      ],
+      "supported_tcp": [
+        0.4318943497766481,
+        -0.00045792867572822665,
+        0.4306989117016127
+      ],
+      "source": "camera_grip_attachment_and_known_cube_geometry"
+    },
+    {
+      "requested_tcp": [
+        0.4323575871771772,
+        -0.0013867172243323608,
+        0.4306985563921372
+      ],
+      "supported_tcp": [
+        0.4323575871771772,
+        -0.0013867172243323608,
+        0.4306985563921372
+      ],
+      "source": "camera_grip_attachment_and_known_cube_geometry"
+    }
+  ],
+  "recording_valid": true
+}

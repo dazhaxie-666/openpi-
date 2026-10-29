@@ -1,0 +1,68 @@
+{
+  "schema": "openarm_dataset_audit_v1",
+  "session": "D:\\openpi\\dataset\\raw\\openarm_grasp_hold_return_p00_smoke_v1\\batch_001\\20261029_120924_386898_51d234",
+  "dataset_name": "openarm_grasp_hold_return_p00_smoke_v1",
+  "stage": "smoke",
+  "task_profile": "hold",
+  "batch_id": 1,
+  "batch_name": "batch_001",
+  "synthetic_input": true,
+  "training_allowed": false,
+  "recording_digest": "2db8d05e3e91e99dee974296284ad8137cea27ca33bef2f325ebc95587d8de20",
+  "quality_contract_digest": "055440ed6b598a4c877614a42b7aedf9b5fffc5d2916da7fd66c251b06f51033",
+  "raw_action_replay_verified": true,
+  "recording_valid": true,
+  "structural_errors": [],
+  "structural_warnings": [
+    "software fixture; exclude from human-demonstration training and success statistics",
+    "continuous direct session may include retries; review/segment successful demonstrations before training",
+    "shared autonomy: use eligible per-trial segments, not the complete session or unassisted-human labels"
+  ],
+  "trials": [
+    {
+      "trial_id": 1,
+      "status": "completed",
+      "start_frame": 0,
+      "end_frame_exclusive": 452,
+      "duration_s": 15.033333333333333,
+      "physical_success": true,
+      "issues": [],
+      "motion": {
+        "manual_duration_s": 4.6000000000000005,
+        "target_joint_speed_p95_rad_s": 0.32406211202452306,
+        "target_joint_speed_max_rad_s": 0.6940711615233409,
+        "reversal_frames": 0,
+        "reversal_frames_per_minute": 0.0,
+        "manual_warning_fraction": 0.0,
+        "review_flags": [],
+        "scope": "manual/transport accepted-target heuristic; not ground-truth human tremor"
+      },
+      "cameras": {
+        "chest_d435i_preview": {
+          "frames": 151,
+          "achieved_hz": 10.0,
+          "max_gap_s": 0.10000000000000142
+        },
+        "v22_left_d405_rgb": {
+          "frames": 151,
+          "achieved_hz": 10.0,
+          "max_gap_s": 0.10000000000000142
+        },
+        "v22_right_d405_rgb": {
+          "frames": 151,
+          "achieved_hz": 10.0,
+          "max_gap_s": 0.10000000000000142
+        }
+      },
+      "max_control_gap_s": 0.03333333333333499,
+      "initial_goal_distance_m": 0.09999998570065492,
+      "candidate": false,
+      "needs_visual_review": false,
+      "training_approved": false
+    }
+  ],
+  "physical_success_segments": 1,
+  "candidate_successes": 0,
+  "training_approved_successes": 0,
+  "scope": "task-profile-aware candidates require visual review; synthetic/pilot/evaluation excluded from training"
+}

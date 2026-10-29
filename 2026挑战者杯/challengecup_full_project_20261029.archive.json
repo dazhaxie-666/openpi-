@@ -1,0 +1,27 @@
+{
+  "archive": "challengecup_full_project_20261029.zip",
+  "bytes": 1145733040,
+  "files": 7779,
+  "sha256": "e537c1da63ced3a8874136e99a1632c1f1b8592fd0641377c1b9ea316a1e31ab",
+  "crc": "PASS",
+  "verification": {
+    "date": "2026-10-29",
+    "source_files": 1149,
+    "copied_files": 7771,
+    "checks": [
+      {
+        "mode": "Check",
+        "exit_code": 0
+      },
+      {
+        "mode": "Test",
+        "exit_code": 0
+      }
+    ],
+    "copied_hash_mismatches": [],
+    "changes_since_previous_verified_core": [],
+    "previous_human_replay_reused": true,
+    "scope": "Full source/assets inventory and collection checks; no claim of testing every historical RL/Isaac/Gazebo mode",
+    "passed": true
+  }
+}

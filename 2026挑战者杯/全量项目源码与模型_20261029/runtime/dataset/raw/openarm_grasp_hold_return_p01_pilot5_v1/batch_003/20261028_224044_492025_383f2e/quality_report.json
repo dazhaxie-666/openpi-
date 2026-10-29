@@ -1,0 +1,18 @@
+{
+  "recording_valid": true,
+  "errors": [],
+  "warnings": [
+    "continuous direct session may include retries; review/segment successful demonstrations before training",
+    "shared autonomy: use eligible per-trial segments, not the complete session or unassisted-human labels"
+  ],
+  "candidate_for_human_bc_review": false,
+  "synthetic_input": false,
+  "eligible_shared_segments": 2,
+  "eligible_full_task_segments": 2,
+  "frames": 4292,
+  "image_count": 3288,
+  "task_success": true,
+  "candidate_for_shared_bc_review": true,
+  "candidate_for_full_task_bc_review": true,
+  "scope": "structural consistency and task gates; not human perception ground truth or a training benchmark"
+}

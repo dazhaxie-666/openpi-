@@ -1,0 +1,36 @@
+{
+  "schema": "openarm_dataset_preflight_v1",
+  "verdict": "PASS",
+  "errors": [],
+  "warnings": [],
+  "python": "D:\\ProgramData\\Anaconda3\\envs\\openpi\\python.exe",
+  "packages": {
+    "numpy": "2.2.6",
+    "mujoco": "3.8.1",
+    "mediapipe": "0.10.35",
+    "opencv-python": "4.13.0.92"
+  },
+  "free_gib": 259.78329849243164,
+  "camera": null,
+  "source_hashes": {
+    "latest/openpi--main/openarm_cloth/run_human_task.py": "4b097dfe5dcc5611427093ae3d1b85e678718809944c327d353a371d98a5bb92",
+    "latest/openpi--main/openarm_cloth/shared_grasp.py": "ebbe6781b3dc924b5313b775afa5a96ad90b0bd790e8e4f1f2ac58a31e517127",
+    "latest/openpi--main/openarm_cloth/shared_grasp_robot.py": "ebc96a74955b6a3ea2c5b9cc42ee2d873682d70ee38b68cece8585c7412e8422",
+    "latest/openpi--main/openarm_cloth/human_task_robot.py": "8435e599672a3e7e778ed8bbea33fe51ee4e8ddfee88e162ccf0d6466698403a",
+    "latest/openpi--main/openarm_cloth/human_grasp_task.py": "7fd86fd5abf8488b3fae77fee088722278a60d2a500d6eca6d3a361b023ff3f2",
+    "latest/openpi--main/openarm_cloth/b_scene_fusion.py": "9d5a188fe97076b42c8d55b94d3d0c7b425a5ee10906f4c3980205b69822f990",
+    "latest/openpi--main/openarm_cloth/member_b_actuators.py": "a5a52396d3b802cfff8af0e33a1a430dfe35be6d2b6887216f8c94c395375cf1",
+    "latest/openpi--main/openarm_cloth/human_palm_depth.py": "6737afafd4575d7f1c8efb12d6e661d823f43634b53f5358a978fd586123f68c",
+    "latest/openpi--main/openarm_cloth/frontal_image_wrist.py": "67a439db1ab07caf9ab41381e9a8f5b6e8b126372cc34ddb2ab848cfdb2abf16",
+    "dataset/scripts/capture_extension.py": "78f2cbd7f48c36b3f3d2f7f63819e73e76679320157906f3dbbb87a94f5e6929",
+    "dataset/scripts/dataset_cli.py": "d20edffd9987101b3c393f2867ed995959648a4f4b92ce1e099047c882d2958f",
+    "dataset/scripts/dataset_quality.py": "f39f952d886d292e24fba407550fc5db3e54d9a4bf7cbecc9a8fb079e9261488",
+    "dataset/config/stages.json": "79c4f7dbf2086776d2f2791492be2a67e96358d78c91276d08d5163b84ea0e21",
+    "latest/openpi--main/openarm_cloth/simulation/v1/task_workspace.json": "135dd310ef47ab24ec6f0d048afecc8a1fcba28c0a9a608cf4df87a7ce9c8a21",
+    "latest/openpi--main/openarm_cloth/simulation/v1/droid_cube_scene_perception.xml": "0a91274b147e130e4f2ba36dafb022664841d8ad027054ae29cd45f360ba3e61"
+  },
+  "capture_hz": 10,
+  "control_hz": 30,
+  "scene_simulation_only": true,
+  "control_behavior_changed": false
+}

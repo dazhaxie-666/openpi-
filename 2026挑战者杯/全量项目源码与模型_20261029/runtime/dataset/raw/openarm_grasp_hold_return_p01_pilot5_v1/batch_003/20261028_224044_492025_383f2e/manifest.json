@@ -1,0 +1,1039 @@
+{
+  "schema": "openarm_human_task_v1",
+  "source": "live_usb",
+  "simulation_only": true,
+  "human_validation_performed": true,
+  "training_performed": false,
+  "synthetic_input": false,
+  "side": "right",
+  "human_side": "right",
+  "robot_side": "right",
+  "pose_model": "full",
+  "camera_device": 0,
+  "hand_thresholds": {
+    "min_hand_detection_confidence": 0.5,
+    "min_hand_presence_confidence": 0.5,
+    "min_tracking_confidence": 0.5
+  },
+  "personal_calibration_path": "D:\\openpi\\dataset\\calibration\\pinch.json",
+  "gripper_hold_controls": "L toggle current aperture; H lock half open; direct wrist only; default continuous",
+  "automatic_grasp_assistance": false,
+  "shared_grasp_workflow": true,
+  "shared_interaction_version": 7,
+  "shared_segment_schema": "full_task_v2",
+  "shared_human_follow_scope": "fixed image body wrist; continuously associated measured hand bridges shoulder loss; >0.35s hand gap needs body; no predicted landmarks",
+  "shared_gestures": "new in-range both-channel PINCH held >=0.20s latches grasp/lift; pre-lift OPEN does not cancel; after the timed hold, only a NEW OPEN held 0.35s returns to source",
+  "shared_payload_hold_scope": "retain last checked servo target on payload hold/rejected carry; no encoder recapture drift; recoverable carry limits rebase; carry-only IK fallback <=8deg grasp attitude, <=4mm position error; B collision checks retained",
+  "shared_place_scope": "exact requested XY; lower IK fallback <=8deg grasp attitude and <=4mm position error; B support geometry and whole-path collision checks; rejected place returns human carry with 20mm relocation before retry; fixed release estimate <=6s for open-jaw vertical exit only",
+  "shared_grasp_entry_scope": "open approach remembered across range/view boundaries; no in-range OPEN gate; new >=0.20s both-channel pinch within 75mm cube surface; complete fresh RGB-D and 40mm center clearance required; hidden-view upward motion follows hand with 70mm bound and <=30s prior",
+  "shared_grasp_scope": "human approach/pinch/carry/open intent; B RGB-D plan/alignment/close/confirm/lift/supported release; automatic trial boundaries; no object truth in control",
+  "task_instruction": "Pick the red cube and place it in the green goal region",
+  "automatic_grasp_scope": null,
+  "visual_grasp_alignment": false,
+  "grasp_effort_confirmation": null,
+  "grasp_contact_prediction": null,
+  "assistance_log_scope": null,
+  "motion_mapping": "relative_wrist",
+  "wrist_position_frame": "fixed-image",
+  "body_position_source": "mediapipe",
+  "image_position_scope": null,
+  "body_position_confidence_scope": null,
+  "direct_wrist_policy_name": "palm",
+  "depth_source": "palm-planar",
+  "palm_depth_sensitivity_m_per_log_ratio": 0.15,
+  "palm_depth_scope": "fixed palm-plane IPPE with image pose fit; nominal camera, relative control, not calibrated metres",
+  "palm_scale_fallback_scope": null,
+  "image_wrist_scope": "fixed five-fresh-frame shoulder pixel scale; current shoulder midpoint and image wrist; no model Z or per-frame rescaling",
+  "linear_algebra_threads": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1"
+  },
+  "controlled_arms": [
+    "right"
+  ],
+  "a_reference_order": "left-first",
+  "a_reference_execution": null,
+  "hand_mapping": "human right -> robot right; preview mirror only",
+  "direct_wrist_policy": "relative image palm-base turn to world-Z yaw +/-70deg; independent XYZ; speed-limited B pose IK",
+  "goal": {
+    "center_xy_m": [
+      0.43,
+      -0.1
+    ],
+    "radius_m": 0.03
+  },
+  "timeout_s": 0.0,
+  "control_hz": 30.0,
+  "control_mode": "direct",
+  "physics_clock": "bounded_wall_time",
+  "physics_catchup_limit_s": 0.1,
+  "timeout_policy": "advisory_only; Q ends continuous practice",
+  "clocks": "active wall time",
+  "startup": "collection-only fixed standby TCP plus automatic simulator reset between labelled trials; reset rows excluded from trial segments",
+  "source_timing": "live_usb",
+  "action_layout": "left joint7+finger2,right joint7+finger2; absolute radians/metres",
+  "alignment": "images and qpos/action_target sampled before the same physical step",
+  "human_video_saved": false,
+  "diagnostic_recording": false,
+  "diagnostic_seconds": null,
+  "diagnostic_protocol": null,
+  "human_video_layout": "human_camera.mp4",
+  "preview_mirrored": true,
+  "preview_hz": 30.0,
+  "robot_preview_hz": 10.0,
+  "preview_policy": "independent raw-camera GUI; latest slot; age-labelled display overlay expires after 200ms; separate status/3D sync cadence",
+  "workspace_anti_windup": true,
+  "layer_trace_scope": "same control-row source clock, pre-step actual state, mapping request and IK diagnostics; no hardware acknowledgement",
+  "ik_acceptance_scope": "position <=8mm, requested palm-yaw attitude error <=20deg; +/-70deg human yaw, bounded angular lead 15deg; solver_success recorded separately",
+  "result_window_enabled": false,
+  "human_validity": "human_valid = pose AND gesture; separate human_pose_valid and human_hand_valid recorded",
+  "cameras": [],
+  "source_hashes": {
+    "human_grasp_task.py": "7fd86fd5abf8488b3fae77fee088722278a60d2a500d6eca6d3a361b023ff3f2",
+    "human_task_robot.py": "f94cca32d004c3a0cd379abc44bc4c147320d8a03bd24d73cde48f7bbd946ff6",
+    "run_human_task.py": "515613ebd3e38a466262223411ed63ba3ad366a83f81efd5f18b61c4b9b90d94",
+    "human_palm_depth.py": "6737afafd4575d7f1c8efb12d6e661d823f43634b53f5358a978fd586123f68c",
+    "human_body_2d.py": "e5cdea228f71ed8fd6114e8d8dbdd62a974bc46250281f3269025ca68962cc1d",
+    "frontal_image_wrist.py": "67a439db1ab07caf9ab41381e9a8f5b6e8b126372cc34ddb2ab848cfdb2abf16",
+    "automatic_grasp.py": "11766347b6e0ed3dface1cf44d5fc8d937260fb2ca559b18537aed9b43553c3b",
+    "direct_palm_yaw.py": "ab21f24bb78ff90274a7772ee05ed3d0e3990b14102202212b50777dc892c740",
+    "shared_grasp.py": "9211b68a262545074e7c68f148b8c958172744f998af29b1e3ee04348b59bcd6",
+    "shared_grasp_robot.py": "244032a9b0fd7b50b7707cd933f313e1f063e21c36658cad4eacb1daf0b5c121",
+    "shared_dataset.py": "5545c82880984f55f50de5c67c18942287887aac133c1803206b83498faa8228",
+    "shared_human_control.py": "debe8d6502da250990bd0fb6bab59dc88a120919b92fb2559b499157832970f2",
+    "shared_interaction_ui.py": "cc9de5c901980d130abc512cd4057c0ee64cdcad015de8ee01914b3ec76b17bb",
+    "shared_grasp_intent.py": "f97068d0ff00cd1a77baee7b80d45d04e24aa3de15cd4c6ecac771a4a16e38ee",
+    "member_b_actuators.py": "a5a52396d3b802cfff8af0e33a1a430dfe35be6d2b6887216f8c94c395375cf1",
+    "b_scene_fusion.py": "1b931b9cdd4331707e3712df7b929ef53c205cea1831479b3899bb4a0ffe8b2f",
+    "human_teleop_core.py": "b2e7cad1e2f08a95585955b89f19cb1867afc75bd3e919b40f791c2e1923e05d",
+    "live_bimanual_stream.py": "7e485947583e98c972dcb33ebd0ebe269f7158c383292f3a4aa6cdcd1504d4f9",
+    "full_video_source.py": "c5a569d9aba24174ac8731fe097b9bd9b365234f2150074ab7ef77969eb42535",
+    "pose2arm_task_mapping.py": "ad0048dc9700a4aa305501fbbfa33250eea2de571c3dd8dfa4d9cc155f972fde",
+    "live_reference_conditioning.py": "997e57222f5f12efde0b43b95ceca77fedc6ba7b79b9919a17051f938a26010f",
+    "live_observation_quality.py": "aaeeff101ff0667f1007d66e11b1a4386849009de6bbadca3cd0a943859a3b39",
+    "motion_observation.py": "8c15ba0d738f49bef482a7c8acacc51f3071f06a5512350bfc4c4c5a02acd4ed",
+    "human_wrist_control.py": "4c1959e4dedc8cbeb363460ae6d343a5a320e6ce96585778a0832d1410a05ef2",
+    "human_pinch_control.py": "0d29ff9ad76c1acc77883aed9da53d5bb697f58bb390ea1d55d9001aa419b3d9",
+    "human_task_diagnostics.py": "f3ce09b90005de5182ed60cddfacbb13335892ac51060c66e5eb310cd1eb48e9",
+    "human_task_preview.py": "a916ce83089d7a300208de89c8934b2b22f01b13f9e2d712884f9124b86d856c",
+    "human_gripper_hold.py": "a96051110f57c709ede9b18d280f69d01d95d011e05a756b87b0b446237ea185",
+    "live_test_dataset.py": "4476678fc62abc0c141055f1cec5ee641ebe68e5bab2748932aa337f0c3b6777",
+    "single_arm_runtime.py": "ab9d1ce853ea27a67325ea40e8c9256186df6b1288a0698b8e89bb613a1c74dc",
+    "async_task_preview.py": "9d5e300823390ea572e2b4af175fc2a56b12df2b9e6a8c0a4caac56c9da9b52a"
+  },
+  "dataset_capture": {
+    "schema": "openarm_dataset_capture_v1",
+    "target_camera_hz": 10.0,
+    "timing": "pre-physics RGB-D snapshot matched to saved control row",
+    "perception_cadence_changed": false,
+    "max_trials": 2,
+    "max_active_seconds": 0.0,
+    "inter_trial_reset_seconds": 3.0,
+    "final_trial_notice_seconds": 2.0,
+    "automatic_scene_reset": true,
+    "task_profile": "hold",
+    "required_payload_hold_seconds": 3.0,
+    "return_to_source": true,
+    "source_return_tolerance_m": 0.03,
+    "collection_ready_tcp_m": [
+      0.38,
+      -0.06,
+      0.58
+    ],
+    "reset_scope": "instant simulator environment reset between labelled trials; reset rows stay outside training segments",
+    "filtering": "raw accepted targets preserved; no posthoc action smoothing"
+  },
+  "shared_camera_calibration": {
+    "chest": {
+      "matrix": [
+        [
+          432.97146126514167,
+          0.0,
+          319.5
+        ],
+        [
+          0.0,
+          432.97146126514167,
+          239.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "world_from_camera_cv": [
+        [
+          -0.0015432944332610804,
+          0.6199229136794305,
+          0.7846612003517807,
+          0.058532085069154555
+        ],
+        [
+          0.9999986988389343,
+          0.0005882146157760587,
+          0.0015021065221235697,
+          -0.0006253439481703618
+        ],
+        [
+          0.0004696410653723948,
+          0.7846624975738109,
+          -0.6199230148482138,
+          0.5911333813833055
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    "right_wrist": {
+      "matrix": [
+        [
+          216.48573063257084,
+          0.0,
+          159.5
+        ],
+        [
+          0.0,
+          216.48573063257084,
+          119.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "body_from_camera_cv": [
+        [
+          0.005160024710959554,
+          -0.8011133481241208,
+          -0.5984904156311472,
+          0.0671313334153707
+        ],
+        [
+          0.9999857907588381,
+          0.00333252676536433,
+          0.004160834745504827,
+          0.00572377475122478
+        ],
+        [
+          -0.0013388149250577186,
+          -0.5985033815466034,
+          0.8011191608318187,
+          -0.06886250625802393
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "robot_body": "openarm_right_hand_tcp"
+    },
+    "detector_center_correction": {
+      "method": "offline_known_fixture_affine_camera_calibration",
+      "controller_runtime_inputs": "camera estimates only",
+      "chest_source": "D:\\openpi\\openarm_cloth\\calibration\\auto_chest\\session_20260924_115906_911\\calibration_chest.json",
+      "grid_x": [
+        0.31,
+        0.39,
+        0.47,
+        0.55
+      ],
+      "grid_y": [
+        -0.18,
+        -0.09,
+        0.0,
+        0.09,
+        0.18
+      ],
+      "chest": {
+        "xy_coeff": [
+          [
+            1.000904206504132,
+            -0.0026121335710979432
+          ],
+          [
+            -0.0009626191926843399,
+            1.0021723581029052
+          ],
+          [
+            0.00363607855627883,
+            0.0011190393292925815
+          ]
+        ],
+        "z_bias_m": 0.0008103213329358395,
+        "rms_mm": 1.7458136373695718,
+        "max_mm": 4.482486853758238,
+        "samples": [
+          {
+            "fixture_xy": [
+              0.31,
+              -0.18
+            ],
+            "observed_xy": [
+              0.30652819879636684,
+              -0.180170251723263
+            ],
+            "truth_xy": [
+              0.3100000202710564,
+              -0.1799999832449581
+            ],
+            "z_error_m": 0.0004829988211774161
+          },
+          {
+            "fixture_xy": [
+              0.31,
+              -0.09
+            ],
+            "observed_xy": [
+              0.3063852962551038,
+              -0.09012328156273355
+            ],
+            "truth_xy": [
+              0.3099999889153527,
+              -0.09000002312830202
+            ],
+            "z_error_m": 0.00044154746892360874
+          },
+          {
+            "fixture_xy": [
+              0.31,
+              0.0
+            ],
+            "observed_xy": [
+              0.30625741747265967,
+              -0.00017278777964283357
+            ],
+            "truth_xy": [
+              0.3099999781591264,
+              -1.745061476943788e-08
+            ],
+            "z_error_m": 0.0003994972283217768
+          },
+          {
+            "fixture_xy": [
+              0.31,
+              0.09
+            ],
+            "observed_xy": [
+              0.30611439342705404,
+              0.08975696196093194
+            ],
+            "truth_xy": [
+              0.309999999087252,
+              0.09000002428274266
+            ],
+            "z_error_m": 0.00035749168495030625
+          },
+          {
+            "fixture_xy": [
+              0.31,
+              0.18
+            ],
+            "observed_xy": [
+              0.30597397283854755,
+              0.1798259857780522
+            ],
+            "truth_xy": [
+              0.3100000202710564,
+              0.18000001675504188
+            ],
+            "z_error_m": 0.0003142267113934172
+          },
+          {
+            "fixture_xy": [
+              0.39,
+              -0.18
+            ],
+            "observed_xy": [
+              0.3894620397446125,
+              -0.1888229559962828
+            ],
+            "truth_xy": [
+              0.3977566819880692,
+              -0.18872359304066752
+            ],
+            "z_error_m": 0.0001879161992168754
+          },
+          {
+            "fixture_xy": [
+              0.39,
+              -0.09
+            ],
+            "observed_xy": [
+              0.38531985271661084,
+              -0.09008981061585447
+            ],
+            "truth_xy": [
+              0.3893115699255467,
+              -0.09005179073607844
+            ],
+            "z_error_m": 0.0007511219897572419
+          },
+          {
+            "fixture_xy": [
+              0.39,
+              0.0
+            ],
+            "observed_xy": [
+              0.3855677457392098,
+              -5.325164312089577e-05
+            ],
+            "truth_xy": [
+              0.39000001365064485,
+              2.38256102938654e-08
+            ],
+            "z_error_m": 0.0007100831853578682
+          },
+          {
+            "fixture_xy": [
+              0.39,
+              0.09
+            ],
+            "observed_xy": [
+              0.3840270657889394,
+              0.08397220406025949
+            ],
+            "truth_xy": [
+              0.3888587964343409,
+              0.08553231712328586
+            ],
+            "z_error_m": 9.270880593825748e-06
+          },
+          {
+            "fixture_xy": [
+              0.47,
+              -0.18
+            ],
+            "observed_xy": [
+              0.4717319442975727,
+              -0.18009223611060796
+            ],
+            "truth_xy": [
+              0.4717607956314716,
+              -0.18214349714668426
+            ],
+            "z_error_m": 0.0010859121458835497
+          },
+          {
+            "fixture_xy": [
+              0.47,
+              -0.09
+            ],
+            "observed_xy": [
+              0.4666263232920737,
+              -0.08994931264991277
+            ],
+            "truth_xy": [
+              0.47000002207150265,
+              -0.09000000078319637
+            ],
+            "z_error_m": 0.0010657455747404843
+          },
+          {
+            "fixture_xy": [
+              0.47,
+              0.0
+            ],
+            "observed_xy": [
+              0.46650914035811974,
+              6.066655456829148e-05
+            ],
+            "truth_xy": [
+              0.47000002105018684,
+              4.305878945911636e-09
+            ],
+            "z_error_m": 0.0010231866910053178
+          },
+          {
+            "fixture_xy": [
+              0.47,
+              0.09
+            ],
+            "observed_xy": [
+              0.4663530449148108,
+              0.08984949681226986
+            ],
+            "truth_xy": [
+              0.4700000021146372,
+              0.08999997881104801
+            ],
+            "z_error_m": 0.0009813721150654375
+          },
+          {
+            "fixture_xy": [
+              0.47,
+              0.18
+            ],
+            "observed_xy": [
+              0.46898097888433476,
+              0.17997541794758587
+            ],
+            "truth_xy": [
+              0.47000002119865647,
+              0.18000000492574508
+            ],
+            "z_error_m": 0.0009114794936053161
+          },
+          {
+            "fixture_xy": [
+              0.55,
+              -0.18
+            ],
+            "observed_xy": [
+              0.5460201360140835,
+              -0.17954469470855577
+            ],
+            "truth_xy": [
+              0.5499999787179721,
+              -0.17999998944717824
+            ],
+            "z_error_m": 0.0014013509145256453
+          },
+          {
+            "fixture_xy": [
+              0.55,
+              -0.09
+            ],
+            "observed_xy": [
+              0.5441705607923171,
+              -0.08965102812269707
+            ],
+            "truth_xy": [
+              0.5499999793294731,
+              -0.08999999807816568
+            ],
+            "z_error_m": 0.0013838403857837078
+          },
+          {
+            "fixture_xy": [
+              0.55,
+              0.0
+            ],
+            "observed_xy": [
+              0.545703398498973,
+              0.0001913158040370965
+            ],
+            "truth_xy": [
+              0.550000006230171,
+              2.3155343018052937e-08
+            ],
+            "z_error_m": 0.0013414031251706149
+          },
+          {
+            "fixture_xy": [
+              0.55,
+              0.09
+            ],
+            "observed_xy": [
+              0.5438887850716787,
+              0.0900960812836511
+            ],
+            "truth_xy": [
+              0.5500000236316915,
+              0.09000000768703366
+            ],
+            "z_error_m": 0.0012994560774539643
+          },
+          {
+            "fixture_xy": [
+              0.55,
+              0.18
+            ],
+            "observed_xy": [
+              0.5454332449060302,
+              0.17998229225168655
+            ],
+            "truth_xy": [
+              0.5499999787179721,
+              0.18000001055282175
+            ],
+            "z_error_m": 0.001248204632854577
+          }
+        ]
+      },
+      "wrist": {
+        "left": {
+          "xy_coeff": [
+            [
+              0.9999899123885877,
+              -0.0009745360620073797
+            ],
+            [
+              -0.003505773676144447,
+              0.9950005567217244
+            ],
+            [
+              0.003516020878123823,
+              0.005343804140798936
+            ]
+          ],
+          "z_bias_m": -0.0006981298885531395,
+          "rms_mm": 0.5556604797624988,
+          "max_mm": 0.8375826395422221,
+          "sample_count": 6,
+          "samples": [
+            {
+              "fixture_xy": [
+                0.31,
+                0.09
+              ],
+              "observed_xy": [
+                0.3068172405130399,
+                0.08554373010138307
+              ],
+              "truth_xy": [
+                0.30999999878776885,
+                0.09000002408354332
+              ],
+              "z_error_m": -0.0011168352864164288
+            },
+            {
+              "fixture_xy": [
+                0.39,
+                0.09
+              ],
+              "observed_xy": [
+                0.38547090596795375,
+                0.08014214515861931
+              ],
+              "truth_xy": [
+                0.388858796193904,
+                0.08553241834531586
+              ],
+              "z_error_m": -0.0015079866993030766
+            },
+            {
+              "fixture_xy": [
+                0.47,
+                0.09
+              ],
+              "observed_xy": [
+                0.4669841442524576,
+                0.08616935481939583
+              ],
+              "truth_xy": [
+                0.4700000016475682,
+                0.08999997880014611
+              ],
+              "z_error_m": -0.00042022215649584194
+            },
+            {
+              "fixture_xy": [
+                0.47,
+                0.18
+              ],
+              "observed_xy": [
+                0.4671399992496684,
+                0.17654527739183035
+              ],
+              "truth_xy": [
+                0.47000002108811906,
+                0.18000000549776934
+              ],
+              "z_error_m": -0.00042416070481315904
+            },
+            {
+              "fixture_xy": [
+                0.55,
+                0.09
+              ],
+              "observed_xy": [
+                0.5467341408978224,
+                0.08571286033661302
+              ],
+              "truth_xy": [
+                0.5500000236020426,
+                0.09000000728255514
+              ],
+              "z_error_m": -0.0003695529061838454
+            },
+            {
+              "fixture_xy": [
+                0.55,
+                0.18
+              ],
+              "observed_xy": [
+                0.5470611738637271,
+                0.17545464905639685
+              ],
+              "truth_xy": [
+                0.5499999788952965,
+                0.1800000111059058
+              ],
+              "z_error_m": -0.00035002157810648526
+            }
+          ]
+        },
+        "right": {
+          "xy_coeff": [
+            [
+              1.0032207454473732,
+              0.004074810502795974
+            ],
+            [
+              -0.0021880903525681146,
+              1.0018594962066505
+            ],
+            [
+              0.00014380221483358945,
+              -0.0005025658678593503
+            ]
+          ],
+          "z_bias_m": -0.00200053418460264,
+          "rms_mm": 0.5676959895213036,
+          "max_mm": 0.9222322926511171,
+          "sample_count": 9,
+          "samples": [
+            {
+              "fixture_xy": [
+                0.31,
+                0.0
+              ],
+              "observed_xy": [
+                0.30906028682728404,
+                -0.00025105157776354574
+              ],
+              "truth_xy": [
+                0.30999997849641714,
+                -1.7723069052911804e-08
+              ],
+              "z_error_m": -0.0016493460407508431
+            },
+            {
+              "fixture_xy": [
+                0.39,
+                -0.18
+              ],
+              "observed_xy": [
+                0.3958238992194242,
+                -0.19039716019062988
+              ],
+              "truth_xy": [
+                0.3977567086506318,
+                -0.18872380323537832
+              ],
+              "z_error_m": -0.002877909061635431
+            },
+            {
+              "fixture_xy": [
+                0.39,
+                0.0
+              ],
+              "observed_xy": [
+                0.38869599890115547,
+                -0.0006673711056115333
+              ],
+              "truth_xy": [
+                0.39000001468921425,
+                2.350658749370756e-08
+              ],
+              "z_error_m": -0.0018073294035245158
+            },
+            {
+              "fixture_xy": [
+                0.47,
+                -0.18
+              ],
+              "observed_xy": [
+                0.4694505816473878,
+                -0.18304871173483483
+              ],
+              "truth_xy": [
+                0.4717607965656255,
+                -0.18214349806682792
+              ],
+              "z_error_m": -0.002095117693482862
+            },
+            {
+              "fixture_xy": [
+                0.47,
+                -0.09
+              ],
+              "observed_xy": [
+                0.46807828216951686,
+                -0.09124759411660517
+              ],
+              "truth_xy": [
+                0.4700000220725572,
+                -0.09000000148427029
+              ],
+              "z_error_m": -0.0019496766343680694
+            },
+            {
+              "fixture_xy": [
+                0.47,
+                0.0
+              ],
+              "observed_xy": [
+                0.4680669704320948,
+                -0.0021373443894365553
+              ],
+              "truth_xy": [
+                0.4700000208793979,
+                4.795166283714615e-09
+              ],
+              "z_error_m": -0.001788412221102209
+            },
+            {
+              "fixture_xy": [
+                0.55,
+                -0.18
+              ],
+              "observed_xy": [
+                0.5481110767132678,
+                -0.18073983425962603
+              ],
+              "truth_xy": [
+                0.5499999788952965,
+                -0.1799999888940942
+              ],
+              "z_error_m": -0.002095590876996234
+            },
+            {
+              "fixture_xy": [
+                0.55,
+                -0.09
+              ],
+              "observed_xy": [
+                0.5478569090025157,
+                -0.09124001559732153
+              ],
+              "truth_xy": [
+                0.549999979341683,
+                -0.0899999972533021
+              ],
+              "z_error_m": -0.0019502961740835434
+            },
+            {
+              "fixture_xy": [
+                0.55,
+                0.0
+              ],
+              "observed_xy": [
+                0.5481116787879894,
+                -0.002118598080113195
+              ],
+              "truth_xy": [
+                0.5500000056778814,
+                2.3319398553003757e-08
+              ],
+              "z_error_m": -0.0017911295554800533
+            }
+          ]
+        }
+      }
+    },
+    "depth_unit": "metres",
+    "camera_axes": "OpenCV x right, y down, z forward"
+  },
+  "mujoco_version": "3.8.1",
+  "model_file": "scene.mjb",
+  "model_sha256": "0d142f8f732513419cc52ded649f41d1b4128a28f923da14df59f616b0e7a41a",
+  "physics_state_spec": 16383,
+  "physics_state_size": 300,
+  "evaluation_hz": 2000.0,
+  "gain": 0.7,
+  "depth_gain": 1.0,
+  "motion_gains": [
+    1.0,
+    0.7,
+    0.7
+  ],
+  "deadband_m": 0.002,
+  "max_target_lead_m": 0.04,
+  "image_size": [
+    320,
+    240
+  ],
+  "close_ratio": 0.35,
+  "open_ratio": 0.8,
+  "gripper_mapping": "continuous calibrated pinch -> 0..0.044 m",
+  "gesture_threshold_role": "start/intent only; accepted aperture has independent hand state",
+  "nq": 25,
+  "nv": 24,
+  "nu": 18,
+  "timestep_s": 0.0005,
+  "robot_joint_names": [
+    "openarm_left_joint1",
+    "openarm_left_joint2",
+    "openarm_left_joint3",
+    "openarm_left_joint4",
+    "openarm_left_joint5",
+    "openarm_left_joint6",
+    "openarm_left_joint7",
+    "openarm_left_finger_joint1",
+    "openarm_left_finger_joint2",
+    "openarm_right_joint1",
+    "openarm_right_joint2",
+    "openarm_right_joint3",
+    "openarm_right_joint4",
+    "openarm_right_joint5",
+    "openarm_right_joint6",
+    "openarm_right_joint7",
+    "openarm_right_finger_joint1",
+    "openarm_right_finger_joint2",
+    "droid_object_freejoint"
+  ],
+  "robot_qpos_index": {
+    "left": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "right": [
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ]
+  },
+  "finger_qpos_index": {
+    "left": [
+      7,
+      8
+    ],
+    "right": [
+      16,
+      17
+    ]
+  },
+  "camera_preview_runtime": {
+    "rendered_frames": 4948,
+    "distinct_camera_frames": 2663,
+    "active_wall_s": 169.95475389999956,
+    "render_hz": 29.11363104859883,
+    "distinct_camera_hz": 15.668876209057938,
+    "render_work_ms_p50": 8.263349999651837,
+    "render_work_ms_p95": 17.973409999967767,
+    "independent_of_control": true,
+    "error": null
+  },
+  "camera_metadata": {
+    "device": 0,
+    "backend": "DSHOW",
+    "mjpg_requested_ok": true,
+    "auto_exposure_requested_ok": true,
+    "reported_width": 1280.0,
+    "reported_height": 720.0,
+    "reported_fps": 30.00003000003,
+    "pose_model": "full",
+    "arms": [
+      "left",
+      "right"
+    ],
+    "expected_sides": [
+      "right"
+    ],
+    "hand_thresholds": {
+      "min_hand_detection_confidence": 0.5,
+      "min_hand_presence_confidence": 0.5,
+      "min_tracking_confidence": 0.5
+    },
+    "position_frame": "upper-body",
+    "body_position_source": "mediapipe",
+    "elbow_recovery_scope": null,
+    "elbow_recovery_error": null,
+    "body_2d_model_sha256": null,
+    "body_2d_scope": null,
+    "identity": "anatomical left -> robot left, right -> right; preview mirror only",
+    "hand_search": "single-hand ROI tracking + body-guided recovery; two-hand full-frame audit at 5 Hz and on loss",
+    "observation_gate": "body/hand wrist consistency; missing anchors never use handedness fallback",
+    "vision_recovery": "R: pause + recreate body/full-hand/ROI VIDEO trackers; no automatic resume",
+    "filter_clock": "camera return timestamps, not variable inference completion"
+  },
+  "calibration_error": null,
+  "shared_observations": {
+    "index": "shared_frames.jsonl",
+    "saved": 3288,
+    "dropped": 0,
+    "error": null,
+    "finished": true,
+    "target_observation_hz": 10.0,
+    "encoding": "robot RGB JPEG90 + metric float32 depth NPZ",
+    "timing": "RGB-D observed before the indexed row action/physics; camera time separate from human source time",
+    "valid": true
+  },
+  "ready_recording_rows_omitted": 103,
+  "ready_recording_scope": "last 40 idle rows plus full active session",
+  "shared_trials": [
+    {
+      "trial_id": 1,
+      "start_s": 5.625062099999923,
+      "status": "completed",
+      "source": "fresh in-range open-to-pinch + B RGB-D grasp planning",
+      "request_frame": 1762,
+      "request_s": 73.09481289999985,
+      "start_frame": 40,
+      "segment_schema": "full_task_v2",
+      "end_s": 89.39801139999963,
+      "reason": "placement observed",
+      "end_frame_exclusive": 2201,
+      "physics": {
+        "scope": "Independent simulated object/contact evaluation; never control input",
+        "max_lift_m": 0.06300370602411098,
+        "sustained_lift_s": 6.509999999999112,
+        "stable_payload_hold_s": 5.103499999999891,
+        "stable_released_in_goal_s": 0.0,
+        "stable_released_at_source_s": 1.8009999999998572,
+        "source_return_error_m": 0.005179731429832117,
+        "source_return_tolerance_m": 0.03,
+        "task_profile": "hold",
+        "required_payload_hold_s": 3.0,
+        "physical_task_success": true
+      },
+      "includes_human_approach": true,
+      "complete_task_segment": true,
+      "eligible_success_segment": true
+    },
+    {
+      "trial_id": 2,
+      "start_s": 92.40746539999964,
+      "status": "completed",
+      "source": "fresh in-range open-to-pinch + B RGB-D grasp planning",
+      "request_frame": 3515,
+      "request_s": 142.28374780000013,
+      "start_frame": 2289,
+      "segment_schema": "full_task_v2",
+      "end_s": 167.9564332,
+      "reason": "placement observed",
+      "end_frame_exclusive": 4233,
+      "physics": {
+        "scope": "Independent simulated object/contact evaluation; never control input",
+        "max_lift_m": 0.06229898247142951,
+        "sustained_lift_s": 15.577000000007546,
+        "stable_payload_hold_s": 14.308500000005996,
+        "stable_released_in_goal_s": 0.0,
+        "stable_released_at_source_s": 1.7719999999998604,
+        "source_return_error_m": 0.004884985649214768,
+        "source_return_tolerance_m": 0.03,
+        "task_profile": "hold",
+        "required_payload_hold_s": 3.0,
+        "physical_task_success": true
+      },
+      "includes_human_approach": true,
+      "complete_task_segment": true,
+      "eligible_success_segment": true
+    }
+  ],
+  "shared_phase_events": "shared_phases.json",
+  "frames": 4292,
+  "finished": true,
+  "result": "result.json",
+  "events": "events.json",
+  "recording_present": true,
+  "task_success": true
+}

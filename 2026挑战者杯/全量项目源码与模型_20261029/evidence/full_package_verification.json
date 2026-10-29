@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-29",
+  "source_files": 1149,
+  "copied_files": 7771,
+  "checks": [
+    {
+      "mode": "Check",
+      "exit_code": 0
+    },
+    {
+      "mode": "Test",
+      "exit_code": 0
+    }
+  ],
+  "copied_hash_mismatches": [],
+  "changes_since_previous_verified_core": [],
+  "previous_human_replay_reused": true,
+  "scope": "Full source/assets inventory and collection checks; no claim of testing every historical RL/Isaac/Gazebo mode",
+  "passed": true
+}

@@ -1,0 +1,177 @@
+[
+  {
+    "time_s": 73.09481289999985,
+    "trial_id": 1,
+    "previous": "manual",
+    "phase": "plan",
+    "reason": "New in-range pinch confirmed by 2D/3D hand input: planning"
+  },
+  {
+    "time_s": 73.82548749999933,
+    "trial_id": 1,
+    "previous": "plan",
+    "phase": "approach",
+    "reason": "Plan ready: direct safe approach"
+  },
+  {
+    "time_s": 75.55178350000006,
+    "trial_id": 1,
+    "previous": "approach",
+    "phase": "descend",
+    "reason": "B reached approach"
+  },
+  {
+    "time_s": 76.72685149999961,
+    "trial_id": 1,
+    "previous": "descend",
+    "phase": "close",
+    "reason": "B reached descend"
+  },
+  {
+    "time_s": 79.05164519999926,
+    "trial_id": 1,
+    "previous": "close",
+    "phase": "lift",
+    "reason": "Grip confirmed: lifting"
+  },
+  {
+    "time_s": 80.59338919999936,
+    "trial_id": 1,
+    "previous": "lift",
+    "phase": "transport",
+    "reason": "Lift complete: move your hand to carry"
+  },
+  {
+    "time_s": 85.69571209999958,
+    "trial_id": 1,
+    "previous": "transport",
+    "phase": "lower",
+    "reason": "hold complete: return to source support before release"
+  },
+  {
+    "time_s": 87.0831006999997,
+    "trial_id": 1,
+    "previous": "lower",
+    "phase": "release",
+    "reason": "support height reached; unload and open jaws"
+  },
+  {
+    "time_s": 87.59560229999988,
+    "trial_id": 1,
+    "previous": "release",
+    "phase": "retract",
+    "reason": "jaws open; retract before next trial"
+  },
+  {
+    "time_s": 88.84499159999996,
+    "trial_id": 1,
+    "previous": "retract",
+    "phase": "verify",
+    "reason": "camera checks supported placement"
+  },
+  {
+    "time_s": 89.39801139999963,
+    "trial_id": 1,
+    "previous": "verify",
+    "phase": "manual",
+    "reason": "Trial recorded; open then pinch for next try. Q saves session"
+  },
+  {
+    "time_s": 89.43147369999951,
+    "trial_id": 1,
+    "previous": "manual",
+    "phase": "reset",
+    "reason": "Trial recorded; protected operator reset time"
+  },
+  {
+    "time_s": 92.40746539999964,
+    "trial_id": 1,
+    "previous": "reset",
+    "phase": "manual",
+    "reason": "Reset complete; approach the cube with an open hand, then pinch to start"
+  },
+  {
+    "time_s": 142.28374780000013,
+    "trial_id": 2,
+    "previous": "manual",
+    "phase": "plan",
+    "reason": "New in-range pinch confirmed by 2D/3D hand input: planning"
+  },
+  {
+    "time_s": 143.01892319999934,
+    "trial_id": 2,
+    "previous": "plan",
+    "phase": "approach",
+    "reason": "Plan ready: direct safe approach"
+  },
+  {
+    "time_s": 144.78964839999935,
+    "trial_id": 2,
+    "previous": "approach",
+    "phase": "descend",
+    "reason": "B reached approach"
+  },
+  {
+    "time_s": 146.01740459999928,
+    "trial_id": 2,
+    "previous": "descend",
+    "phase": "close",
+    "reason": "B reached descend"
+  },
+  {
+    "time_s": 148.32472919999964,
+    "trial_id": 2,
+    "previous": "close",
+    "phase": "lift",
+    "reason": "Grip confirmed: lifting"
+  },
+  {
+    "time_s": 149.88464059999933,
+    "trial_id": 2,
+    "previous": "lift",
+    "phase": "transport",
+    "reason": "Lift complete: move your hand to carry"
+  },
+  {
+    "time_s": 164.1930171999993,
+    "trial_id": 2,
+    "previous": "transport",
+    "phase": "lower",
+    "reason": "hold complete: return to source support before release"
+  },
+  {
+    "time_s": 165.67171719999988,
+    "trial_id": 2,
+    "previous": "lower",
+    "phase": "release",
+    "reason": "support height reached; unload and open jaws"
+  },
+  {
+    "time_s": 166.18468979999943,
+    "trial_id": 2,
+    "previous": "release",
+    "phase": "retract",
+    "reason": "jaws open; retract before next trial"
+  },
+  {
+    "time_s": 167.41319359999943,
+    "trial_id": 2,
+    "previous": "retract",
+    "phase": "verify",
+    "reason": "camera checks supported placement"
+  },
+  {
+    "time_s": 167.9564332,
+    "trial_id": 2,
+    "previous": "verify",
+    "phase": "manual",
+    "reason": "Trial recorded; open then pinch for next try. Q saves session"
+  },
+  {
+    "time_s": 167.98999419999927,
+    "trial_id": 2,
+    "previous": "manual",
+    "phase": "session_complete",
+    "reason": "Final trial recorded; saving collection"
+  }
+]

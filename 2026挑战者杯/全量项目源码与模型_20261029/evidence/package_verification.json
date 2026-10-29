@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-29",
+  "passed": true,
+  "runtime": "D:\\openpi\\challengecup_delivery_20261029\\runtime",
+  "checks": [
+    {
+      "mode": "Check",
+      "exit_code": 0,
+      "log": "package_check.log"
+    },
+    {
+      "mode": "Test",
+      "exit_code": 0,
+      "log": "package_tests.log"
+    }
+  ],
+  "human_sample_replay": {
+    "verdict": "PASS",
+    "execution": "actions",
+    "frames": 4292,
+    "max_qpos_error": 0.0,
+    "max_qvel_error": 0.0,
+    "physical_actuator_replay": true,
+    "environment_resets_applied": 1,
+    "synthetic_input": false,
+    "human_validation_performed": false,
+    "scope": "same-model local replay consistency; recorded environment resets delimit actuator-replayed trials; not a new human test or cross-machine determinism guarantee",
+    "module_file": "D:\\openpi\\challengecup_delivery_20261029\\runtime\\latest\\openpi--main\\openarm_cloth\\replay_human_task.py",
+    "scope_package": "Historical human pilot replay on independent packaged model; not new live collection or training approval"
+  },
+  "manifest_files_checked": 7412,
+  "hash_mismatches": [],
+  "new_human_camera_validation": false,
+  "original_source_modified_by_packaging": false
+}

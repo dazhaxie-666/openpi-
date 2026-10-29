@@ -1,0 +1,14 @@
+{
+  "verdict": "PASS",
+  "execution": "actions",
+  "frames": 4292,
+  "max_qpos_error": 0.0,
+  "max_qvel_error": 0.0,
+  "physical_actuator_replay": true,
+  "environment_resets_applied": 1,
+  "synthetic_input": false,
+  "human_validation_performed": false,
+  "scope": "same-model local replay consistency; recorded environment resets delimit actuator-replayed trials; not a new human test or cross-machine determinism guarantee",
+  "module_file": "D:\\openpi\\challengecup_delivery_20261029\\runtime\\latest\\openpi--main\\openarm_cloth\\replay_human_task.py",
+  "scope_package": "Historical human pilot replay on independent packaged model; not new live collection or training approval"
+}

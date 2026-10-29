@@ -1,0 +1,10 @@
+# Direct collection dependencies captured from the verification environment.
+numpy==2.2.6
+mujoco==3.8.1
+scipy==1.15.3
+opencv-python==4.13.0.92
+glfw==2.10.0
+Pillow==10.4.0
+mediapipe==0.10.35
+websockets==15.0.1
+msgpack==1.2.1

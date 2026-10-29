@@ -1,0 +1,60 @@
+[
+  {
+    "trial_id": 1,
+    "start_s": 5.625062099999923,
+    "status": "completed",
+    "source": "fresh in-range open-to-pinch + B RGB-D grasp planning",
+    "request_frame": 1762,
+    "request_s": 73.09481289999985,
+    "start_frame": 40,
+    "segment_schema": "full_task_v2",
+    "end_s": 89.39801139999963,
+    "reason": "placement observed",
+    "end_frame_exclusive": 2201,
+    "physics": {
+      "scope": "Independent simulated object/contact evaluation; never control input",
+      "max_lift_m": 0.06300370602411098,
+      "sustained_lift_s": 6.509999999999112,
+      "stable_payload_hold_s": 5.103499999999891,
+      "stable_released_in_goal_s": 0.0,
+      "stable_released_at_source_s": 1.8009999999998572,
+      "source_return_error_m": 0.005179731429832117,
+      "source_return_tolerance_m": 0.03,
+      "task_profile": "hold",
+      "required_payload_hold_s": 3.0,
+      "physical_task_success": true
+    },
+    "includes_human_approach": true,
+    "complete_task_segment": true,
+    "eligible_success_segment": true
+  },
+  {
+    "trial_id": 2,
+    "start_s": 92.40746539999964,
+    "status": "completed",
+    "source": "fresh in-range open-to-pinch + B RGB-D grasp planning",
+    "request_frame": 3515,
+    "request_s": 142.28374780000013,
+    "start_frame": 2289,
+    "segment_schema": "full_task_v2",
+    "end_s": 167.9564332,
+    "reason": "placement observed",
+    "end_frame_exclusive": 4233,
+    "physics": {
+      "scope": "Independent simulated object/contact evaluation; never control input",
+      "max_lift_m": 0.06229898247142951,
+      "sustained_lift_s": 15.577000000007546,
+      "stable_payload_hold_s": 14.308500000005996,
+      "stable_released_in_goal_s": 0.0,
+      "stable_released_at_source_s": 1.7719999999998604,
+      "source_return_error_m": 0.004884985649214768,
+      "source_return_tolerance_m": 0.03,
+      "task_profile": "hold",
+      "required_payload_hold_s": 3.0,
+      "physical_task_success": true
+    },
+    "includes_human_approach": true,
+    "complete_task_segment": true,
+    "eligible_success_segment": true
+  }
+]

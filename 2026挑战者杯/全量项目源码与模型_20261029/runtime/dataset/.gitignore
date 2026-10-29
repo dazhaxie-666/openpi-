@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+# Runtime output and operator-specific state stay local.
+/calibration/
+/exports/
+/logs/
+/raw/
+/reports/
+/snapshots/
+/tmp/

@@ -1,0 +1,104 @@
+{
+  "date": "2026-10-29",
+  "root": "D:\\2026挑战者杯",
+  "top_files": [
+    "challengecup_full_project_20261029.archive.json",
+    "challengecup_full_project_20261029.zip",
+    "作品介绍PPT写作指导.md",
+    "写作AI提示词.md",
+    "初步想法.md",
+    "工作流程.md",
+    "挑战杯项目申报说明及填报文案_20261028.md",
+    "提交材料检查与使用说明.md",
+    "数据补录操作指南.md",
+    "文件清点与完整性核查.json"
+  ],
+  "packages": [
+    {
+      "folder": "全量项目源码与模型_20261029",
+      "manifest_files": 7771,
+      "actual_files": 7780,
+      "extensions": {
+        ".json": 169,
+        ".md": 109,
+        ".ps1": 9,
+        ".txt": 10,
+        ".log": 36,
+        "<none>": 12,
+        ".py": 241,
+        ".npz": 3326,
+        ".mjb": 2,
+        ".jsonl": 1,
+        ".jpg": 3295,
+        ".stl": 90,
+        ".pyw": 2,
+        ".step": 8,
+        ".yaml": 9,
+        ".jsonc": 1,
+        ".html": 1,
+        ".toml": 1,
+        ".png": 235,
+        ".csv": 14,
+        ".sh": 1,
+        ".xml": 38,
+        ".mjs": 6,
+        ".js": 6,
+        ".yml": 3,
+        ".obj": 98,
+        ".mtl": 30,
+        ".dae": 9,
+        ".gif": 1,
+        ".task": 4,
+        ".mp4": 5,
+        ".xacro": 1,
+        ".onnx": 3,
+        ".usd": 4
+      },
+      "missing": [],
+      "mismatch": []
+    }
+  ],
+  "archives": [
+    {
+      "archive": "challengecup_full_project_20261029.zip",
+      "bytes": 1145733040,
+      "sha256": "e537c1da63ced3a8874136e99a1632c1f1b8592fd0641377c1b9ea316a1e31ab",
+      "matches": true
+    }
+  ],
+  "cleanup": {
+    "removed": [
+      "材料精简前备份_20261029",
+      "文档修订前备份_20261029",
+      "视觉遥操作共享控制_数据采集交付包_20261029",
+      "challengecup_collection_20261029.zip",
+      "challengecup_collection_20261029.archive.json"
+    ],
+    "retained_package": "全量项目源码与模型_20261029",
+    "scope": "Remove superseded delivery copies and prose revision backups; retain full source, models, raw data, and bundled research records."
+  },
+  "writing_review": {
+    "main_slides_including_cover": 12,
+    "guide_pages": 12,
+    "prompt_pages": 12,
+    "broken_local_links": [],
+    "updated_files": {
+      "作品介绍PPT写作指导.md": {
+        "bytes": 23550,
+        "sha256": "1bf2d3e17aa9bae29d3e3db824491ff79613b112630b51482a4ac89bdd7aef1f"
+      },
+      "写作AI提示词.md": {
+        "bytes": 17752,
+        "sha256": "f6dc6153969771338e3d41b65fa1cf79e3fc0f0446027098bb574dddef77f1d5"
+      },
+      "初步想法.md": {
+        "bytes": 1275,
+        "sha256": "e900978dd91d263a3744c4664da6548dd501c5357f0c1a64aba03cad43007f18"
+      },
+      "提交材料检查与使用说明.md": {
+        "bytes": 4295,
+        "sha256": "7c21eebb89756da2dbc5437ae99b5f3b1e223bb44a077e8682c725db894bf693"
+      }
+    }
+  }
+}
