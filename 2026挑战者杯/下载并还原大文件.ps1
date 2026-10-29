@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $taskRoot = $PSScriptRoot
 $taskManifest = Get-Content -LiteralPath (Join-Path $taskRoot '大文件还原清单.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $taskArchiveInfo = $taskManifest.files | Where-Object { $_.url }
