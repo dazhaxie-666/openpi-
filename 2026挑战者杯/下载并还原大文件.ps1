@@ -4,11 +4,26 @@ $taskManifest = Get-Content -LiteralPath (Join-Path $taskRoot '大文件还原�
 $taskArchiveInfo = $taskManifest.files | Where-Object { $_.url }
 $taskArchive = Join-Path $taskRoot $taskArchiveInfo.path
 if (-not (Test-Path -LiteralPath $taskArchive)) {
-    $taskPartial = "$taskArchive.partial"
-    Write-Host 'Downloading original project archive...'
-    Invoke-WebRequest -Uri $taskArchiveInfo.url -OutFile $taskPartial -UseBasicParsing
-    if ((Get-FileHash -LiteralPath $taskPartial -Algorithm SHA256).Hash.ToLowerInvariant() -ne $taskArchiveInfo.sha256) { throw 'Archive SHA-256 mismatch' }
-    Move-Item -LiteralPath $taskPartial -Destination $taskArchive
+    foreach ($taskPart in $taskArchiveInfo.parts) {
+        $taskPartPath = Join-Path $taskRoot $taskPart.path
+        if (-not (Test-Path -LiteralPath $taskPartPath)) {
+            Write-Host "Downloading $($taskPart.path)..."
+            Invoke-WebRequest -Uri $taskPart.url -OutFile "$taskPartPath.partial" -UseBasicParsing
+            if ((Get-FileHash -LiteralPath "$taskPartPath.partial" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $taskPart.sha256) { throw 'Part SHA-256 mismatch' }
+            Move-Item -LiteralPath "$taskPartPath.partial" -Destination $taskPartPath
+        }
+        if ((Get-FileHash -LiteralPath $taskPartPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $taskPart.sha256) { throw 'Existing part SHA-256 mismatch' }
+    }
+    Write-Host 'Combining verified parts...'
+    $taskCombined = [System.IO.File]::Create("$taskArchive.partial")
+    try {
+        foreach ($taskPart in $taskArchiveInfo.parts) {
+            $taskInput = [System.IO.File]::OpenRead((Join-Path $taskRoot $taskPart.path))
+            try { $taskInput.CopyTo($taskCombined) } finally { $taskInput.Dispose() }
+        }
+    } finally { $taskCombined.Dispose() }
+    if ((Get-FileHash -LiteralPath "$taskArchive.partial" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $taskArchiveInfo.sha256) { throw 'Combined ZIP SHA-256 mismatch' }
+    Move-Item -LiteralPath "$taskArchive.partial" -Destination $taskArchive
 }
 if ((Get-FileHash -LiteralPath $taskArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $taskArchiveInfo.sha256) { throw 'Existing archive SHA-256 mismatch' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem

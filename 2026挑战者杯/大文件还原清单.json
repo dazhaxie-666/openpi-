@@ -6,7 +6,27 @@
       "path": "challengecup_full_project_20261029.zip",
       "bytes": 1145733040,
       "sha256": "e537c1da63ced3a8874136e99a1632c1f1b8592fd0641377c1b9ea316a1e31ab",
-      "url": "https://github.com/dazhaxie-666/openpi-/releases/download/challengecup-20261029-all/challengecup_full_project_20261029.zip"
+      "url": "https://github.com/dazhaxie-666/openpi-/releases/download/challengecup-20261029-all/challengecup_full_project_20261029.zip",
+      "parts": [
+        {
+          "path": "challengecup_full_project_20261029.zip.part001",
+          "bytes": 536870912,
+          "sha256": "d09bd248cfb2c2b39afe4a54fa7752a8148e4551ff2663fbff286cf3cfabe7e5",
+          "url": "https://github.com/dazhaxie-666/openpi-/releases/download/challengecup-20261029-all/challengecup_full_project_20261029.zip.part001"
+        },
+        {
+          "path": "challengecup_full_project_20261029.zip.part002",
+          "bytes": 536870912,
+          "sha256": "707d39bc67c64181056c6ab8b98cda1940cfee9d0b5d93862703e178f8a2c369",
+          "url": "https://github.com/dazhaxie-666/openpi-/releases/download/challengecup-20261029-all/challengecup_full_project_20261029.zip.part002"
+        },
+        {
+          "path": "challengecup_full_project_20261029.zip.part003",
+          "bytes": 71991216,
+          "sha256": "73edfb526123863f6a4fbeb9466ce00de3d3c2574f15f56ebb9ffe8c871cb0ea",
+          "url": "https://github.com/dazhaxie-666/openpi-/releases/download/challengecup-20261029-all/challengecup_full_project_20261029.zip.part003"
+        }
+      ]
     },
     {
       "path": "全量项目源码与模型_20261029/runtime/dataset/raw/openarm_grasp_hold_return_p01_pilot5_v1/batch_003/20261028_224044_492025_383f2e/scene.mjb",

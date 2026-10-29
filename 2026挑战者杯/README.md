@@ -12,7 +12,7 @@ GitHub 普通 Git 文件限制下，原始 ZIP 和两个超过 100 MiB 的 MJB �
 & '.\下载并还原大文件.ps1'
 ```
 
-脚本从 [完整技术包 Release](https://github.com/dazhaxie-666/openpi-/releases/tag/challengecup-20261029-all) 下载原始 ZIP，校验 SHA-256，再提取两个模型到原路径。完整目录因此同时包含源码文件夹与原始压缩包，和本地交付一致。
+脚本从 [完整技术包 Release](https://github.com/dazhaxie-666/openpi-/releases/tag/challengecup-20261029-all) 下载 ZIP 分卷，校验各卷并自动合并原始 ZIP，再提取两个模型到原路径。完整目录因此同时包含源码文件夹与原始压缩包，和本地交付一致。
 
 如已单独下载原始 ZIP，将其放在本目录，再执行脚本即可复用。通过 `大文件还原清单.json` 可核对三个大文件的原路径、大小与哈希。
 
@@ -21,3 +21,5 @@ GitHub 普通 Git 文件限制下，原始 ZIP 和两个超过 100 MiB 的 MJB �
 先阅读 `数据补录操作指南.md`，按指南把运行环境部署到纯英文路径，准备 Python 依赖，再执行 Check、摄像头检查与个人标定。
 
 PPT 和申报写作使用本目录顶层最新 Markdown。原始技术包中的源码文档和验证报告保留其记录时点。
+
+大附件采用 3 个分卷交付。运行还原脚本会自动下载、合并和校验；合并后的 ZIP 与原始全量技术包逐字节一致。
