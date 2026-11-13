@@ -32,6 +32,49 @@ def wrist_visibility_prior(last,clock,visible,mask_pixels):
     return prior
 
 
+def corroborated_stationary_pose(last_full,clock,partial_measurements,wrist_visible,mask_pixels,
+        maximum_age_s=30.,maximum_delta_m=.015):
+    """Use current dual-view evidence to revalidate a recent precise pose.
+
+    The chest partial centre is not accurate enough to plan from by itself.
+    It may only revalidate the last complete camera pose while at least one
+    wrist image independently contains the cube and the chest displacement is
+    bounded.  This is current RGB-D evidence, not an unobserved stale prior.
+    """
+    if last_full is None or not wrist_visible:return None
+    measured_time=float(last_full.get('prior_time_s',last_full.get('time_s',np.nan)))
+    if not np.isfinite(measured_time) or not 0<=clock-measured_time<=maximum_age_s:return None
+    chest=next((m for m in partial_measurements if str(m.get('source','')).startswith('chest')),None)
+    if chest is None:return None
+    delta=float(np.linalg.norm(np.asarray(chest['center'])-np.asarray(last_full['center'])))
+    if not np.isfinite(delta) or delta>maximum_delta_m:return None
+    result=dict(last_full,center=np.asarray(last_full['center']).copy())
+    result.update(source='chest_partial/wrist_presence_stationary',time_s=float(clock),
+        pose_is_prior=False,pose_is_corroborated=True,prior_time_s=measured_time,
+        corroboration_delta_m=delta,wrist_visible=True,wrist_mask_pixels=int(mask_pixels))
+    return result
+
+
+def cross_camera_partial_pose(clock,partial_measurements,maximum_delta_m=.015,active_wrist='right'):
+    """Accept current partial geometry only when chest and active wrist agree.
+
+    The non-grasping wrist is excellent as a complete-pose fallback, but its
+    clipped partial centre has a different view-dependent bias.  It must not
+    enter this particular agreement path.
+    """
+    chest=next((m for m in partial_measurements if str(m.get('source','')).startswith('chest')),None)
+    wrists=[m for m in partial_measurements if f'_{active_wrist}_' in str(m.get('source',''))]
+    if chest is None or not wrists:return None
+    compatible=[(float(np.linalg.norm(np.asarray(m['center'])-np.asarray(chest['center']))),m) for m in wrists]
+    delta,selected=min(compatible,key=lambda item:item[0])
+    if not np.isfinite(delta) or delta>maximum_delta_m:return None
+    result=dict(selected,center=np.asarray(selected['center']).copy())
+    result.update(source='chest/wrist_partial_agreement',time_s=float(clock),
+        pose_is_prior=False,pose_is_corroborated=True,corroboration_delta_m=delta,
+        wrist_visible=True,wrist_mask_pixels=int(selected.get('mask_pixels',0)))
+    return result
+
+
 class BVisualObserver:
     def __init__(self,model,specs,camera_sides=(None,'left','right')):
         self.model=model;self.specs=specs
@@ -40,7 +83,7 @@ class BVisualObserver:
         self.calibration=load_workspace_rgbd_calibration()
         self.chest=mujoco.Renderer(model,480,640);self.wrist=mujoco.Renderer(model,240,320)
         self.handeye={s:load_handeye(latest_handeye_report(s),s) for s in SIDES}
-        self.last=None;self.attempts=[]
+        self.last=None;self.last_full=None;self.attempts=[]
         self.retain_frames=False;self.frames={}
         self.known_cube_tracking=False;self.measurements=[];self.partial_measurements=[]
 
@@ -98,10 +141,20 @@ class BVisualObserver:
             # pose, which can continue to come from the chest camera.
             selected['wrist_visible']=wrist_visible
             selected['wrist_mask_pixels']=wrist_mask_pixels
+            selected['pose_is_prior']=False;selected['pose_is_corroborated']=False
+            self.last_full=dict(selected,center=np.asarray(selected['center']).copy())
             self.last=selected
             return self.last
-        prior=wrist_visibility_prior(self.last,clock,wrist_visible,wrist_mask_pixels)
-        return prior if prior is not None else self.last
+        corroborated=cross_camera_partial_pose(clock,self.partial_measurements)
+        if corroborated is not None:
+            self.last_full=dict(corroborated,center=np.asarray(corroborated['center']).copy())
+            self.last=corroborated;return self.last
+        corroborated=corroborated_stationary_pose(self.last_full,clock,self.partial_measurements,
+            wrist_visible,wrist_mask_pixels)
+        if corroborated is not None:self.last=corroborated;return self.last
+        prior=wrist_visibility_prior(self.last_full,clock,wrist_visible,wrist_mask_pixels)
+        self.last=prior if prior is not None else self.last_full
+        return self.last
 
     def close(self): self.chest.close();self.wrist.close()
 

@@ -175,7 +175,7 @@ class HumanTaskRobot:
         self.contact_scene_near=False;self.contact_query_center=np.full(3,np.nan)
         self.contact_query_rotation=np.full((3,3),np.nan);self.contact_diagnostics={}
         self.reference_trajectories.clear();self.motion_origin=None;self.motion_progress=0.;self.motion_duration=0.
-        self.observer.last=None;self.observer.attempts=[];self.observer.measurements=[]
+        self.observer.last=self.observer.last_full=None;self.observer.attempts=[];self.observer.measurements=[]
         self.observer.partial_measurements=[];self.observer.frames={}
 
     def observe(self, clock):

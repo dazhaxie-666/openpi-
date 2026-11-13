@@ -26,29 +26,6 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 & .\run.ps1 -Mode check -ScriptArgs '--check-models'
 ```
 
-## 数据集采集与自动分段
-
-仓库内 `dataset/` 是共享抓放示教的统一采集入口。从仓库根目录运行：
-
-```powershell
-& .\dataset\dataset.ps1 -Mode Check
-& .\dataset\dataset.ps1 -Mode Camera -Camera 0
-& .\dataset\dataset.ps1 -Mode Test
-& .\dataset\dataset.ps1 -Mode Smoke -Task Hold -Trials 2 -ResetSeconds 3
-```
-
-真人正式采集前先做三段隔离试采：
-
-```powershell
-& .\dataset\dataset.ps1 -Mode Pilot -Task Hold -Camera 0 -Trials 5 -ResetSeconds 3 -Seconds 0 -Batch 1
-```
-
-当前 `-Task Hold` 流程为：靠近并捏合，机器人抓取和抬起后锁定位置保持 3 秒；倒计时结束后保持手腕不动并张手，机器人自动回到抓取源位置下降。每段结束后，除最后一段外，机械臂和方块自动复位，并提供 3 秒受保护重置时间。复位行带独立标记，不进入训练试次，动作回放会重现相同边界。`C` 只重新对齐人手到机械臂的相对映射，不是场景复位键。
-
-首次训练建议使用 5 条 `Pilot` 验证，再采 30 条审核通过的 `Collect -Task Hold` 成功示范；详细分批命令见 `dataset/README_CN.md`。原来的搬运到绿色区域任务继续保留为 `-Task PickPlace`。
-
-原始数据、日志、报告、个人标定和导出文件由 `dataset/.gitignore` 保持在本机。完整操作、审核与训练准入规则见 [dataset/README_CN.md](dataset/README_CN.md)。
-
 ## 单臂实时遥操（当前优先）
 
 2026-10-27 抓取任务优先使用共享模式：
@@ -58,17 +35,17 @@ Set-Location -LiteralPath 'D:\openpi\latest\openpi--main'
 ```
 
 SPACE 只需开始一次；捏合请求 B RGB-D 抓取，搬运时人控制 XYZ，张手后先下降再松爪。
-最新：方块姿态短暂缺失时不再锁进“只向上恢复”，右手仍可控制前后、左右和上下；夹爪保持张开且禁止盲抓。自然张手靠近，进入范围直接捏合；新捏合需二维/三维同时确认 0.2 秒，并冻结同帧 RGB-D 快照供规划使用，下一帧瞬时缺失不会结束该段。
-见[遮挡全手动控制与原子抓取快照](openarm_cloth/docs/manual_full_control_plan_snapshot_20261028_CN.md)。
+最新：恢复视野的抬起幅度跟随人手，不再自动上升到固定高度；自然张手靠近，进入范围直接捏合，无需额外张手准备；新捏合需二维/三维同时确认 0.2 秒。
+见[手动上抬与抓取防误触](openarm_cloth/docs/manual_view_pinch_20261027_CN.md)。
 最新修复张手已识别但下降 IK 失败后锁住搬运的问题：有限腕姿调整；仍不可达时提示换位置并交还搬运。
 详见[放置优化与论文参考](openarm_cloth/docs/placement_release_research_20261027_CN.md)。
 人工靠近到约 7.5 cm 内直接捏合接管；张手 0.7 秒取消，搬运中张手 0.35 秒放下。
-当前 7.5 cm 按方块表面距离计算；贴近遮挡时仍由右手自由控制机械臂调整位置，重新获得完整方块姿态后才能发起新抓取。
+当前 7.5 cm 按方块表面距离计算；贴近遮挡时将手向上抬可先退开恢复视野。
 范围内显示绿色“可以抓取”提示；抓牢后直接张手保持约 0.35 秒放下，不再需要额外捏合准备。
 见[当前提示与放下修复](openarm_cloth/docs/grasp_prompt_release_20261027_CN.md)。
 识别适用范围见[当前接触入口修复](openarm_cloth/docs/contact_entry_fix_20261027_CN.md)。
 试次已覆盖人工靠近全过程，见[当前交互修复](openarm_cloth/docs/shared_human_workflow_20261027_CN.md)。
-遮挡时保持人手 XYZ 控制但强制张爪；新完整观测和范围内新捏合才允许规划抓取。抓取自动提起前，明确张手仍会取消。
+遮挡时由人向上移手恢复视野；新完整观测和范围内新捏合才允许规划抓取。抓取自动提起前，明确张手仍会取消。
 自动划分试次并保存机器人 RGB-D；`-NoDataset` 关闭图像采集，`启动修复版遥操.ps1 -Direct` 回到直接遥操。
 见[当前共享抓取说明](openarm_cloth/docs/shared_grasp_dataset_20261027_CN.md)。下方保留此前直接遥操的说明。
 

@@ -41,6 +41,10 @@ def snapshot_plan(model,positions,addresses,spec,geoms,fingers,visual):
 class SharedGraspRobot(HumanTaskRobot):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
+        # Shared collection records and fuses the chest plus both calibrated
+        # wrist RGB-D views.  The non-grasping wrist often sees the cube when
+        # the active wrist clips it at the image edge.
+        self.observer.camera_sides=(None,'left','right')
         self.shared_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix='B-camera-grasp')
         self.shared_future=None;self.shared_plan_locked=False;self.shared_plan_visual=None
         self.shared_planning_s=0.;self.shared_plan_started=None

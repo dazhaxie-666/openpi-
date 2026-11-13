@@ -71,8 +71,9 @@ class SharedGraspTask(DirectHumanTask):
 
     def fresh_grasp_request(self,human,status):
         """Remember natural open approach; accept a NEW pinch only in range."""
-        eligible=status['fresh'] and status['in_range'] and status['height_clear']
-        if not eligible:
+        spatially_eligible=status['in_range'] and status['height_clear']
+        eligible=status['fresh'] and spatially_eligible
+        if not spatially_eligible:
             self.request_close_since=None;self.request_close_count=0
         if (human is None or not self.hand_intent_valid or self.request_ratio is None
             or not np.isfinite(self.request_ratio) or not np.isfinite(human.capture_s)):
@@ -90,10 +91,15 @@ class SharedGraspTask(DirectHumanTask):
             # preparation step or separate OPEN dwell is required.
             self.request_open_since=human.capture_s;self.rearm=True
         elif self.request_ratio<=self.config.close_ratio:
-            if not eligible:
+            if not spatially_eligible:
                 # A pinch already made outside range must not fire merely
                 # because the robot later crosses the range boundary.
                 self.reset_grasp_entry();return False
+            if not status['fresh']:
+                # A one-frame camera downgrade pauses confirmation.  It cannot
+                # advance or authorize a grasp, but it also must not erase the
+                # surrounding fresh frames and make the interaction feel stuck.
+                return False
             if self.rearm:
                 self.request_open_since=None
                 if self.request_close_since is None:self.request_close_since=human.capture_s

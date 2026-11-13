@@ -2,7 +2,8 @@ import unittest
 import numpy as np
 from human_grasp_task import HumanInput,Feedback
 from shared_grasp import SharedGraspTask
-from b_scene_fusion import wrist_target_visibility,wrist_visibility_prior
+from b_scene_fusion import (wrist_target_visibility,wrist_visibility_prior,
+    corroborated_stationary_pose,cross_camera_partial_pose)
 from test_automatic_grasp import observation
 
 
@@ -175,6 +176,58 @@ class SharedTaskTests(unittest.TestCase):
         self.assertEqual(self.task.phase,'manual');self.assertEqual(cmd.stage,'direct')
         self.assertEqual(self.task.trial_id,0)
 
+    def test_brief_prior_frames_pause_but_do_not_erase_fresh_pinch_confirmation(self):
+        self.fb.tcp[2]=.49
+        for _ in range(6):self.tick(1.2)
+        full=dict(self.fb.visual)
+        for i in range(7):
+            self.fb.visual=(dict(full,pose_is_prior=True,time_s=self.i*.05)
+                if i%2==0 else dict(full,pose_is_prior=False,time_s=self.i*.05))
+            cmd=self.tick(.1)
+        self.assertEqual(self.task.phase,'plan');self.assertEqual(cmd.stage,'plan')
+
+    def test_prior_only_frames_can_never_authorize_a_grasp(self):
+        self.fb.tcp[2]=.49
+        for _ in range(6):self.tick(1.2)
+        full=dict(self.fb.visual)
+        for _ in range(20):
+            self.fb.visual=dict(full,pose_is_prior=True,time_s=self.i*.05)
+            cmd=self.tick(.1)
+        self.assertEqual(self.task.phase,'manual');self.assertEqual(self.task.trial_id,0)
+
+    def test_current_chest_depth_plus_wrist_presence_can_corroborate_a_recent_full_pose(self):
+        full=dict(center=np.array([.43,0.,.429]),yaw=.2,time_s=1.,source='chest_d435i_preview')
+        partial=[dict(center=np.array([.441,0.,.429]),yaw=.1,time_s=2.,source='chest_d435i_preview')]
+        pose=corroborated_stationary_pose(full,2.,partial,True,5000)
+        self.assertFalse(pose['pose_is_prior']);self.assertTrue(pose['pose_is_corroborated'])
+        self.assertEqual(pose['source'],'chest_partial/wrist_presence_stationary')
+        np.testing.assert_array_equal(pose['center'],full['center'])
+
+    def test_stationary_corroboration_rejects_motion_stale_pose_or_missing_wrist(self):
+        full=dict(center=np.array([.43,0.,.429]),yaw=.2,time_s=1.)
+        near=[dict(center=np.array([.441,0.,.429]),source='chest_d435i_preview')]
+        far=[dict(center=np.array([.446,0.,.429]),source='chest_d435i_preview')]
+        self.assertIsNone(corroborated_stationary_pose(full,2.,far,True,5000))
+        self.assertIsNone(corroborated_stationary_pose(full,32.,near,True,5000))
+        self.assertIsNone(corroborated_stationary_pose(full,2.,near,False,0))
+
+    def test_current_chest_and_wrist_partial_depth_agreement_is_a_fresh_pose(self):
+        partial=[
+            dict(center=np.array([.439,0.,.429]),yaw=.1,source='chest_d435i_preview',mask_pixels=5000),
+            dict(center=np.array([.43,0.,.429]),yaw=.2,source='v22_right_d405_rgb',mask_pixels=9000)]
+        pose=cross_camera_partial_pose(2.,partial)
+        self.assertFalse(pose['pose_is_prior']);self.assertTrue(pose['pose_is_corroborated'])
+        self.assertEqual(pose['source'],'chest/wrist_partial_agreement')
+        np.testing.assert_array_equal(pose['center'],partial[1]['center'])
+
+    def test_partial_depth_agreement_requires_two_cameras_within_fifteen_mm(self):
+        chest=dict(center=np.array([.43,0.,.429]),source='chest_d435i_preview')
+        far=dict(center=np.array([.446,0.,.429]),source='v22_left_d405_rgb')
+        biased_left=dict(center=np.array([.439,0.,.429]),source='v22_left_d405_rgb')
+        self.assertIsNone(cross_camera_partial_pose(2.,[chest]))
+        self.assertIsNone(cross_camera_partial_pose(2.,[chest,far]))
+        self.assertIsNone(cross_camera_partial_pose(2.,[chest,biased_left]))
+
     def test_no_target_or_expired_camera_geometry_cannot_authorise_blind_retreat(self):
         self.fb.visual=None;self.task.last_target=None
         for _ in range(6):cmd=self.tick(.1)
@@ -326,6 +379,10 @@ class SharedBoundaryTests(unittest.TestCase):
         self.addCleanup(robot.close)
         robot.visual=dict(center=np.array([.43,0,.429]),yaw=.2,time_s=0.)
         return robot,data
+
+    def test_shared_collection_uses_chest_and_both_wrist_cameras(self):
+        robot,data=self.robot(shared=True)
+        self.assertEqual(robot.observer.camera_sides,(None,'left','right'))
 
     def test_grasp_tool_rotation_is_never_used_as_object_rotation(self):
         import mujoco
