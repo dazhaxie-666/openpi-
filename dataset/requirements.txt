@@ -1,0 +1,13 @@
+# Collection baseline verified with Python 3.12 on Windows.
+-c constraints-windows-py312.txt
+numpy==2.2.6
+mujoco==3.8.1
+scipy==1.15.3
+opencv-python==4.13.0.92
+# MediaPipe also installs this distribution; keep both cv2 providers aligned.
+opencv-contrib-python==4.13.0.92
+glfw==2.10.0
+Pillow==10.4.0
+mediapipe==0.10.35
+websockets==15.0.1
+msgpack==1.2.1

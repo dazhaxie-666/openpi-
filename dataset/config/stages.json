@@ -1,0 +1,54 @@
+{
+  "schema": "openarm_dataset_stages_v2",
+  "task": "Pick the red cube and place it in the green goal region",
+  "task_profiles": {
+    "pickplace": {
+      "description": "Pick the red cube and place it in the green goal region",
+      "hold_seconds": 0.0,
+      "return_to_source": false
+    },
+    "hold": {
+      "description": "Grasp the red cube, lift and hold it still for 3 seconds, then return it to its source position",
+      "hold_seconds": 3.0,
+      "return_to_source": true,
+      "source_tolerance_m": 0.03
+    }
+  },
+  "capture_hz": 10,
+  "control_hz": 30,
+  "stages": {
+    "smoke": {"name": "openarm_pickplace_p00_smoke_v1", "purpose": "software_fixture_only", "training_allowed": false, "target_successes": 0},
+    "pilot": {"name": "openarm_pickplace_p01_pilot_v1", "purpose": "capture_pipeline_validation", "training_allowed": false, "target_successes": 20},
+    "core": {"name": "openarm_pickplace_p02_core100_v1", "purpose": "core_demonstrations", "training_allowed": true, "target_successes": 100},
+    "coverage": {"name": "openarm_pickplace_p03_coverage170_v1", "purpose": "additional_pose_coverage", "training_allowed": true, "target_successes": 170},
+    "recovery": {"name": "openarm_pickplace_p04_recovery30_v1", "purpose": "reviewed_recovery_demonstrations", "training_allowed": true, "target_successes": 30},
+    "eval": {"name": "openarm_pickplace_p05_eval_holdout_v1", "purpose": "isolated_evaluation", "training_allowed": false, "target_successes": 0}
+  },
+  "hold_stages": {
+    "smoke": {"name": "openarm_grasp_hold_return_p00_smoke_v1", "purpose": "software_fixture_only", "training_allowed": false, "target_successes": 0},
+    "pilot": {"name": "openarm_grasp_hold_return_p01_pilot5_v1", "purpose": "capture_pipeline_validation", "training_allowed": false, "target_successes": 5},
+    "core": {"name": "openarm_grasp_hold_return_p02_core30_v1", "purpose": "first_skill_core_demonstrations", "training_allowed": true, "target_successes": 30},
+    "coverage": {"name": "openarm_grasp_hold_return_p03_coverage_v1", "purpose": "optional_future_pose_coverage", "training_allowed": true, "target_successes": 0},
+    "recovery": {"name": "openarm_grasp_hold_return_p04_recovery_v1", "purpose": "optional_future_recovery_demonstrations", "training_allowed": true, "target_successes": 0},
+    "eval": {"name": "openarm_grasp_hold_return_p05_eval5_v1", "purpose": "isolated_evaluation", "training_allowed": false, "target_successes": 5}
+  },
+  "initial_poses": {
+    "center": [0.43, 0.0, 30.0],
+    "left": [0.43, 0.045, 30.0],
+    "right": [0.43, -0.015, 30.0],
+    "near": [0.405, 0.015, 30.0],
+    "far": [0.455, 0.015, 30.0],
+    "yaw0": [0.43, 0.0, 0.0],
+    "yaw60": [0.43, 0.0, 60.0]
+  },
+  "quality": {
+    "max_camera_gap_s": 0.25,
+    "min_camera_hz": 8.0,
+    "max_control_gap_s": 0.20,
+    "max_active_pause_rows": 0,
+    "min_source_goal_distance_m": 0.08,
+    "manual_joint_speed_warning_rad_s": 1.0,
+    "manual_target_reversal_warning_per_minute": 45.0,
+    "max_manual_rejection_fraction": 0.05
+  }
+}

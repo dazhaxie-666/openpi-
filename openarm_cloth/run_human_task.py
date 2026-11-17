@@ -100,6 +100,15 @@ def direct_hand_command(command,hand,stage,held_aperture,paused=False):
     return TaskCommand('hold',finger=held_aperture)
 
 
+def shared_task_instruction(task):
+    """Describe the executed collection task, including its actual hold duration."""
+    if getattr(task, 'collection_task_profile', 'pickplace') == 'hold':
+        seconds = float(getattr(task, 'collection_hold_seconds', 3.0))
+        return (f'Grasp the red cube, lift and hold it still for {seconds:g} seconds, '
+                'then return it to its source position')
+    return 'Pick the red cube and place it in the green goal region'
+
+
 def save_task_calibration(output,source,personal_path,synthetic=False):
     """Optional calibration I/O must not interrupt robot/episode finalization."""
     if source is None:return None
@@ -414,7 +423,7 @@ def run(args, dataset_capture=None):
                     shared_place_scope='exact requested XY; lower IK fallback <=8deg grasp attitude and <=4mm position error; B support geometry and whole-path collision checks; rejected place returns human carry with 20mm relocation before retry; fixed release estimate <=6s for open-jaw vertical exit only' if shared else None,
                     shared_grasp_entry_scope='open approach remembered across range/view boundaries; no in-range OPEN gate; new >=0.20s both-channel pinch within 75mm cube surface; complete fresh RGB-D and 40mm center clearance required; hidden-view upward motion follows hand with 70mm bound and <=30s prior' if shared else None,
                     shared_grasp_scope='human approach/pinch/carry/open intent; B RGB-D plan/alignment/close/confirm/lift/supported release; automatic trial boundaries; no object truth in control' if shared else None,
-                    task_instruction='Pick the red cube and place it in the green goal region' if shared else None,
+                    task_instruction=shared_task_instruction(task) if shared else None,
                     automatic_grasp_scope='camera-proximity gain/speed scaling; opt-in camera centering during fresh closing intent (25mm total, 15mm/s); clearance before closure; encoder/servo+camera latch; explicit human release; no automatic lift' if auto_assist else None,
                     visual_grasp_alignment=bool(auto_assist and task.visual_alignment_enabled),
                     grasp_effort_confirmation='both servo efforts >=1.8 N and sum >=5.6 N, bilateral stall and camera enclosure >=0.25s; B cube-specific sensor criteria, not measured pad normal forces' if auto_assist else None,

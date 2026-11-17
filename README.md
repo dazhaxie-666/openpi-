@@ -1,5 +1,9 @@
 # OpenArm / Pose2Arm A+B 主项目
 
+**2026-11-17 采集交接：** 新电脑从 main 克隆后，按[新电脑数据采集交接说明](dataset/HANDOFF_CN.md)完成环境、模型下载、个人标定、试采和验收。
+采集入口为 `dataset/dataset.ps1`；任务、阶段和采后操作见[完整采集指南](dataset/PI05_HOLD_DATA_COLLECTION_GUIDE_CN.md)。
+本轮优先技能是右臂抓取、抬升、保持3秒并原位放回，正式采集需显式指定 `-Task Hold`。
+
 2026-10-27 GitHub 更新：仓库内可用 `start_shared_grasp.ps1` 启动当前共享抓取。
 新电脑配置、发布范围及验证见[本次更新说明](docs/github_publish_20261027.md)。
 
